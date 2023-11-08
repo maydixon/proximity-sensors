@@ -4,10 +4,24 @@ output: html_notebook
 ---
 
 
+```{r}
+library(tidyverse)
+```
+
 
 ```{r}
+gn <- 
+mn <- 
+      
+test_table <- read.csv("https://raw.githubusercontent.com/maydixon/proximity-sensors/main/test_table.csv", sep=",", header=TRUE, stringsAsFactors = F ) 
 
+reads_nov7_2 <- read.csv("https://github.com/maydixon/proximity-sensors/blob/main/23-11-08/15-51-42/MN_DATA.CSV",sep=",", header=TRUE, stringsAsFactors = F )
+View(reads_nov7_2)
+
+
+str(d)     
 ```
+
 
 
 
