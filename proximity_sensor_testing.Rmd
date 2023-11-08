@@ -7,24 +7,50 @@ output: html_notebook
 ```{r}
 library(tidyverse)
 library(readr)
+library(lubridate)
 ```
+
+Goals: 
+1. see the number of reads from each tag
+2. tag each meeting by pairwise distance
+     --- convert times into datetimes? 
+     --- if datetime  between X and X, joinby?  
+3. compare rssi by distance
+
+
 
 
 ```{r}
-gn <- 
-mn <- 
-      
-test_table <- read.csv("https://raw.githubusercontent.com/maydixon/proximity-sensors/main/test_table.csv", sep=",", header=TRUE, stringsAsFactors = F ) 
 
-# MN_DATA_nov7_2 <- read.csv("https://github.com/maydixon/proximity-sensors/blob/main/23-11-08/15-51-42/MN_DATA.CSV",sep=",", header=TRUE, stringsAsFactors = F )
+
+test_table <- read.csv("https://raw.githubusercontent.com/maydixon/proximity-sensors/main/test_table.csv", sep=",", header=TRUE ) #stringsAsFactors = F
+View(test_table)
+# MN_DATA_nov7_2 <- read.csv("https://raw.githubusercontent.com/maydixon/proximity-sensors/blob/main/23-11-08/15-51-42/MN_DATA.CSV",sep=",", header=TRUE, stringsAsFactors = F )
 # for some reason reading in with a lagging line
 
-MN_DATA_nov7 <- read_csv("23-11-08/15-51-42/MN_DATA.CSV")
-View(MN_DATA_nov7)
+MN_DATA <- read_csv("23-11-08/15-51-42/MN_DATA.CSV")
+View(MN_DATA)
 
 str(d)     
 ```
 
 
+```{r}
+colnames(MN_DATA) 
+
+#remove spaces from MN_DATA column names
+colnames(MN_DATA) <- sub(" ", "_", colnames(MN_DATA))
+
+#put date time in one column for MN_DATA
+MN_DATA <- MN_DATA %>%
+       mutate(date_time = make_datetime(year = Meeting_Year, month = Meeting_Month, day = Meeting_Day, hour = Meeting_Hour,min =  Meeting_Minute, sec = Meeting_Second)) 
+
+# put date time in two columns for test table
+test_table <- test_table %>%
+      mutate(start_time = make_datetime(year = start_year, month = start_month, day = start_day, hour = start_hour, min =  start_minute, sec = start_second))
+
+data %>%
+  mutate(date = make_date(year, month, day)
+```
 
 
