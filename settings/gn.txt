@@ -1,0 +1,5 @@
+{
+"Dulog GN Settings File Version" : "1",
+"Timezone offset" : "-5",
+"RSSI download threshold" : "-65",
+}

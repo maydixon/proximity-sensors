@@ -1,0 +1,32 @@
+{
+"Dulog MN Settings File Version" : "1",
+
+"Beacon Intervall" : "2",
+"Alternative Beacon Intervall" : "",
+"Time start" : "",
+"Time stop" : "",
+
+"Meeting storage format" : "2",
+"Meeting max duration" : "30",
+"Meeting allowed gap" : "2",
+"Meeting allow zero length" : "n",
+"Meeting rssi algorithm" : "1",
+"Meeting enable ram first" : "n",
+"Meeting agressive flash usage" : "y",
+
+"First startup time" : "",
+"Daily off time 1.1 off" : "",
+"Daily off time 1.1 on" : "",
+"Daily off time 1.2 off" : "",
+"Daily off time 1.2 on" : "",
+"Daily off time 1.3 off" : "",
+"Daily off time 1.3 on" : "",
+"Long term off time off" : "",
+"Long term off time on" : "",
+"Daily off time 2.1 off" : "",
+"Daily off time 2.1 on" : "",
+"Daily off time 2.2 off" : "",
+"Daily off time 2.2 on" : "",
+"Daily off time 2.3 off" : "",
+"Daily off time 2.3 on" : "",
+}
