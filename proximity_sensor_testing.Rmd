@@ -6,6 +6,7 @@ output: html_notebook
 
 ```{r}
 library(tidyverse)
+library(readr)
 ```
 
 
@@ -15,9 +16,11 @@ mn <-
       
 test_table <- read.csv("https://raw.githubusercontent.com/maydixon/proximity-sensors/main/test_table.csv", sep=",", header=TRUE, stringsAsFactors = F ) 
 
-reads_nov7_2 <- read.csv("https://github.com/maydixon/proximity-sensors/blob/main/23-11-08/15-51-42/MN_DATA.CSV",sep=",", header=TRUE, stringsAsFactors = F )
-View(reads_nov7_2)
+# MN_DATA_nov7_2 <- read.csv("https://github.com/maydixon/proximity-sensors/blob/main/23-11-08/15-51-42/MN_DATA.CSV",sep=",", header=TRUE, stringsAsFactors = F )
+# for some reason reading in with a lagging line
 
+MN_DATA_nov7 <- read_csv("23-11-08/15-51-42/MN_DATA.CSV")
+View(MN_DATA_nov7)
 
 str(d)     
 ```
