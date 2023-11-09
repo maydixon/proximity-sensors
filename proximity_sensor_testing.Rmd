@@ -34,10 +34,10 @@ View(test_table)
 MN_DATA <- read_csv("23-11-08/15-51-42/MN_DATA.CSV")
 View(MN_DATA)
 
-str(d)     
+   
 ```
 
-
+FIX column names and date/time
 ```{r}
 colnames(MN_DATA) 
 
@@ -54,6 +54,22 @@ test_table <- test_table %>%
              end_time = make_datetime(year = end_year, month = end_month, day = end_day, hour = end_hour, min =  end_minute, sec = end_second))
 
 ```
+
+Combine sender and receiver in both docs
+```{r}
+head(MN_DATA)
+
+
+MN_DATA <-MN_DATA %>%
+      mutate( RX_TX = paste(RX_Node, TX_Node, sep = "_"))
+  
+test_table <- test_table %>%
+      mutate( RX_TX = paste(receiver, sender, sep = "_"))
+#unite(RX_TX, c("RX_Node", "TX_Node")) %>%head()
+
+
+```
+
 if mn_data date_time  is between test_table start_time and end_time
 
 
