@@ -1,0 +1,197 @@
+---
+title: "Proximity sensor testing Nov 10"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(readr)
+library(lubridate)
+```
+
+Goals: 
+1. see the number of reads from each tag
+2. tag each meeting by pairwise distance
+     --- convert times into datetimes? 
+     --- if datetime  between X and X, joinby?  
+3. compare rssi by distance
+
+
+
+
+```{r}
+
+
+#test_table <- read.csv("https://raw.githubusercontent.com/maydixon/proximity-sensors/main/test_table.csv", sep=",", header=TRUE ) #stringsAsFactors = F
+test_table <- read_csv("test_table.csv")
+
+View(test_table)
+
+# MN_DATA_nov7_2 <- read.csv("https://raw.githubusercontent.com/maydixon/proximity-sensors/blob/main/23-11-08/15-51-42/MN_DATA.CSV",sep=",", header=TRUE, stringsAsFactors = F )
+# for some reason reading in with a lagging line
+
+MN_DATA <- read_csv("23-11-08/15-51-42/MN_DATA.CSV")
+View(MN_DATA)
+
+   
+```
+
+FIX column names and date/time
+```{r}
+colnames(MN_DATA) 
+
+#remove spaces from MN_DATA column names
+colnames(MN_DATA) <- sub(" ", "_", colnames(MN_DATA))
+
+#put date time in one column for MN_DATA
+MN_DATA <- MN_DATA %>%
+       mutate(date_time = make_datetime(year = Meeting_Year, month = Meeting_Month, day = Meeting_Day, hour = Meeting_Hour,min =  Meeting_Minute, sec = Meeting_Second)) 
+
+
+# put date time in two columns for test table
+test_table <- test_table %>%
+      mutate(start_time = make_datetime(year = start_year, month = start_month, day = start_day, hour = start_hour, min =  start_minute, sec = start_second), 
+             end_time = make_datetime(year = end_year, month = end_month, day = end_day, hour = end_hour, min =  end_minute, sec = end_second))
+str(test_table)
+
+
+```
+
+Combine sender and receiver in both docs
+```{r}
+head(MN_DATA)
+
+
+MN_DATA <-MN_DATA %>%
+      mutate( RX_TX = paste(RX_Node, TX_Node, sep = "_"))
+  
+test_table <- test_table %>%
+      mutate( RX_TX = paste(receiver, sender, sep = "_"))
+#unite(RX_TX, c("RX_Node", "TX_Node")) %>%head()
+
+test_table <- test_table %>%
+      mutate( test_type = paste(test, type_parallel, sep = "_"))
+
+```
+
+match trial numbers by time range
+then make a dummy variable with unique trial and dyad, match with that
+
+```{r}
+#show each of the time values 
+test_table %>%
+      select(test_type, start_time, end_time) %>%
+      group_by(test_type)%>%
+      filter(row_number()==1)
+
+#dulogs weirdly have to be set to GMT0 to work 
+MN_DATA <- MN_DATA %>%
+      mutate(test_type = case_when(
+date_time >= as.POSIXct("2023-11-08 11:45:00", tz = "Etc/GMT0") & date_time <= as.POSIXct("2023-11-08 11:54:00", tz = "Etc/GMT0") ~ "ten_parallel",
+date_time >= as.POSIXct("2023-11-08 11:54:30", tz = "Etc/GMT0") & date_time <= as.POSIXct("2023-11-08 12:04:00", tz = "Etc/GMT0") ~ "ten_moved",
+date_time >= as.POSIXct("2023-11-08 12:04:30", tz = "Etc/GMT0") & date_time <= as.POSIXct("2023-11-08 12:14:00", tz = "Etc/GMT0") ~ "fifty_moved",
+date_time >= as.POSIXct("2023-11-08 12:14:30", tz = "Etc/GMT0") & date_time <= as.POSIXct("2023-11-08 13:48:00", tz = "Etc/GMT0") ~ "fifty_parallel",
+date_time >= as.POSIXct("2023-11-08 13:48:50", tz = "Etc/GMT0") & date_time <= as.POSIXct("2023-11-08 13:58:00", tz = "Etc/GMT0") ~ "hundred_parallel",
+date_time >= as.POSIXct("2023-11-08 13:58:30", tz = "Etc/GMT0") & date_time <= as.POSIXct("2023-11-08 14:08:00", tz = "Etc/GMT0") ~ "hundred_moved",
+.default = "group_no"
+))
+```
+
+```{r}
+# make dummy variable for joining
+test_table <- test_table %>%
+      mutate( RX_TX_test_type = paste(RX_TX, test_type, sep = "_"))
+#unite(RX_TX, c("RX_Node", "TX_Node")) %>%head()
+
+#make dummy variable for joining in other database
+MN_DATA <- MN_DATA %>%
+      mutate( RX_TX_test_type = paste(RX_TX, test_type, sep = "_"))
+
+#add the test_table values to the data
+MN_DATA$distance_cm <- test_table$distance_cm[match(MN_DATA$RX_TX_test_type, test_table$RX_TX_test_type)]
+      
+MN_DATA$sender_position <- test_table$sender_position[match(MN_DATA$RX_TX_test_type, test_table$RX_TX_test_type)]
+MN_DATA$receiver_position <- test_table$receiver_position[match(MN_DATA$RX_TX_test_type, test_table$RX_TX_test_type)]
+
+#separate test_type
+MN_DATA <- MN_DATA %>%
+      mutate(test_type1 = test_type)
+
+#separate test_type1
+MN_DATA <- MN_DATA %>%
+     separate(test_type1, c('test_distance', 'type_parallel'))
+
+
+```
+
+
+
+Number of reads of each tag
+
+```{r}
+#number of meetings transmitted by each tag
+TX_sum <- MN_DATA %>%
+      group_by(TX_Node) %>%
+      summarise(n=n())
+TX_sum
+
+TX_sum_p <- ggplot(MN_DATA, aes(x= as.factor(TX_Node))) +
+      geom_bar()
+TX_sum_p
+
+```
+```{r}
+#number of meetings transmitted by each tag
+RX_sum <- MN_DATA %>%
+      group_by(RX_Node) %>%
+      summarise(n=n())
+RX_sum
+
+RX_sum_p <- ggplot(MN_DATA, aes(x= as.factor(RX_Node))) +
+      geom_bar()
+RX_sum_p
+
+#90 didn't even transmit anything
+```
+
+Distance by RSSI
+```{r}
+
+# by RX ID
+ggplot(data= MN_DATA, aes(y=RSSI, x= distance_cm, color= as.factor(RX_Node))) +
+      geom_jitter()
+
+ggplot(data= MN_DATA, aes(y=RSSI, x= distance_cm, color= as.factor(RX_TX))) +
+      geom_jitter()
+
+
+# by orientation
+MN_DATA %>%
+      group_by(distance_cm) %>%
+      ggplot( aes(y=RSSI, x= distance_cm, color= as.factor(type_parallel))) +
+      geom_jitter()
+
+```
+
+Reads by time
+```{r}
+X date_time
+
+Y = receiver
+
+MN_DATA %>%
+      group_by(RX_Node) %>%
+      ggplot( aes(y=as.factor(RX_Node), x= date_time, color= as.factor(RX_Node))) +
+      geom_point()
+
+MN_DATA %>%
+      group_by(TX_Node) %>%
+      ggplot( aes(y=as.factor(TX_Node), x= date_time, color= as.factor(TX_Node))) +
+      geom_point()
+
+
+```
+##############
+
+
