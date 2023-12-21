@@ -3,22 +3,26 @@ title: "Proximity sensor testing Nov 10"
 output: html_notebook
 ---
 
-December 12th to send to Gerry 
 
-try to make a list of how long the bats have all spent together
-what female was accidentlly added? 
-
-
-
-
+We ran a test to compare the performance of dulog and proxlog tags under standardized conditions. In each test, we placed 5 tags on a grid with "North", "South", "East", "West", and "Center" as their positions. In the first test "ten-parallel", each tag on a cardinal direction was 10cm from the central tag, with all the tags facing in roughly the same orientation ("parallel"), and kept for about 10 minutes. Later tests (50, 100, 200...) the tags were moved 50 cm from the center, and so on. For the 10-100 distances, we also ran tests where we rotated the tags so that they faced in haphazard directions ("moved" tests)
 Write abstract with Summary
 From the ground up thing in the beginning 
 Here is the beginning, and here are the results 
-- 
+
 - variation across tags at a given distance in signal 
+            - calc standard deviation by group, plot sd
+            - test for significant differences between groups @ given distance?  (groupby distance/ whatever sd comparison test bt tag)
+            - to compare variance between groups: levene test, brown-forsythe test, Bartlett's test (more powerful)
+            - try standarizing the values? subtract or add from each? 
+            
+      - percent variance? (look at difs in means?)
+
 - signal strength with distance across different tags
+ 
 - compare sensitivity to tag direction across the different tags
-- % pr probability is useful as a statistic
+different in signal strength or not? what % weaker
+- Differences within each group? 
+- % pr probability is useful as a statistic ()
 - battery performance 
 - saline glove and flight cage conditions
 - 
@@ -46,7 +50,7 @@ Goals:
 #test_table <- read.csv("https://raw.githubusercontent.com/maydixon/proximity-sensors/main/test_table.csv", sep=",", header=TRUE ) #stringsAsFactors = F
 
 test_table <- read_csv("test_table_nov10.csv")
-View(test_table)
+
 
 # MN_DATA_nov7_2 <- read.csv("https://raw.githubusercontent.com/maydixon/proximity-sensors/blob/main/23-11-08/15-51-42/MN_DATA.CSV",sep=",", header=TRUE, stringsAsFactors = F )
 # for some reason reading in with a lagging line
@@ -269,7 +273,7 @@ Tag_Data <- Tag_Data %>%
 
 ## Data analysis
 
-Meetings recorded by receiving tags by time 
+Meetings recorded by receiving tags by time - Looking at only the day we recorded (Nov 10)
 ```{r}
 
   # a lot of data from the 7th, also a random one from the 20th 
@@ -334,7 +338,8 @@ Tag_Data %>%
 
 ggplot(Tag_Data, aes(x= TX_Node)) +
       geom_bar() +
-      facet_wrap(~tag, scales= "free_x")
+      facet_wrap(~tag, scales= "free_x") +
+      xlab("# of Contacts Transmitted")
 
 
 #number of meetings received by each tag
@@ -347,7 +352,8 @@ Tag_Data %>%
       group_by(tag) %>%
       ggplot( aes(x= RX_Node)) +
       geom_bar() + 
-      facet_wrap(~tag, scales="free_x")
+      facet_wrap(~tag, scales="free_x") +
+      xlab("# of Contacts Received")
 
 ```
 Both tags had some weird IDs, that we did not use at the time. Dulog had more. 
@@ -413,7 +419,8 @@ reads from all meetings, by trial type
  Tag_Data %>%
  ggplot( aes(x= RX_Node)) +
       geom_bar() + 
-      facet_wrap(~test_type_tag, scales="free_x", ncol = 2)
+      facet_wrap(~test_type_tag, scales="free_x", ncol = 2) 
+     
 
 
 ```
@@ -422,32 +429,32 @@ The two tags have similar ranges. But the dulogs detected tags up to at least 4m
 Dulog reads more evenly than proxlog
 
 
-Distance by RSSI
+Signal Strength (RSSI) by Distance
 ```{r}
 Tag_Data$RSSI <- as.numeric(Tag_Data$RSSI)
 
-
-# # trying to summarize distance
-Tag_Data %>%
-      group_by(tag, distance_cm) %>%
-      mutate(dist_test = paste(distance_cm, test_type, sep = "_")) %>%
-ggplot(aes(y=RSSI, x= as.factor(distance_cm), color= as.factor(tag))) +
-      geom_violin()
-      
 
 # by tag
 ggplot(data= Tag_Data, aes(y=as.numeric(RSSI), x= distance_cm, color= as.factor(tag))) +
       geom_point(position = "jitter") 
 
+# by tag with trendline
+ggplot(data= Tag_Data, aes(y=RSSI, x= distance_cm, color= as.factor(tag))) +
+      #geom_point(position = "jitter") +
+      geom_jitter() +
+       geom_smooth( level = .99) +
+      geom_smooth(method = "glm", formula = y~log(x), family = gaussian(link = 'log'))
+
+
 #by RX ID
-ggplot(data= Tag_Data, aes(y=RSSI, x= distance_cm, color= as.factor(RX_TX))) +
+ggplot(data= Tag_Data, aes(y=RSSI, x= distance_cm, color= RX_TX)) +
       geom_jitter()
 
 
-# by orientation
+# by tag orientation
 Tag_Data %>%
       group_by(distance_cm) %>%
-      ggplot( aes(y=RSSI, x= distance_cm, color= as.factor(type_parallel))) +
+      ggplot( aes(y=RSSI, x= distance_cm, color= type_parallel)) +
       geom_jitter() 
 
 #by test
@@ -464,33 +471,97 @@ ggplot(data= Tag_Data, aes(y=RSSI, x= distance_cm, color= as.factor(tag))) +
       xlim(0, 100)
 
 
-# by tag
-ggplot(data= Tag_Data, aes(y=RSSI, x= distance_cm, color= as.factor(tag))) +
-      #geom_point(position = "jitter") +
-      geom_jitter() +
-      # geom_smooth( level = .99)
-      geom_smooth(method = "glm", formula = y~log(x), family = gaussian(link = 'log'))
+# # trying to summarize distance
+Tag_Data %>%
+      group_by(tag, distance_cm) %>%
+      mutate(dist_test = paste(distance_cm, test_type, sep = "_")) %>%
+ggplot(aes(y=RSSI, x= as.factor(distance_cm), color= tag)) +
+      geom_violin()
+      
 
 str(Tag_Data)
 ```
+Proxlog and Dulog use different signals, so they have different signal strengths at the same distances. 
+Proxlog declines logarithmically, is especially steep at low distances. Dulog initially declines very precipitously and later declines  linearly. 
 
+Differences in signal strength variance by group
 ```{r}
-Tag_Data %>% 
-      filter(distance_cm == 300) %>%
-      filter(tag== "proxlog")
+sd_tags <- Tag_Data %>%
+      filter(distance_cm < 600 ) %>%
+  group_by( distance_cm, tag) %>%
+      summarize(RSSI_SD=sd(RSSI), RSSI_mean = mean(RSSI), N=n())
+sd_tags
 
-Tag_Data %>% 
-      filter(test_type == "threehundred_parallel") %>%
-      filter(tag== "proxlog")
+sd_tags %>%
+      ggplot(aes(x=distance_cm, y= RSSI_SD, color = tag )) +
+      geom_point() +
+      geom_smooth(level = .99) +
+      xlab("Distance (cm)") +
+      ylab("RSSI SD")
 
+ 
 
-
-test_table %>% 
-      filter(distance_cm == 300) %>%
-      filter(tag== "proxlog")
+ Tag_Data %>%
+       group_by(distance_cm) %>%
+       filter(any(tag=="dulog") & any(tag=="proxlog")) %>% #remove groups where there aren't observations for both prox and dulogs.
+       group_by(distance_cm) %>%
+       group_map(~ bartlett.test(x=.$RSSI, g=.$tag))
+       #bartlett.test(x=.$RSSI, g=.$tag)
+ 
+  #bartlett.test(RSSI ~ tag)
+#find the mean difference in signal strength between each group
+#compare the variance between each group @ given signal strength  Bartlett test
+  
+  
+Tag_Data %>%
+      filter(distance_cm ==100.00) %>%
+      group_by(test_type, tag) %>%
+  filter(row_number()==1)
 ```
 
+There is no obvious difference in the variation in signal strength between the two tags. 
+At small distances, both tags have about the same variance, and at larger distances, dulogs seem to have higher variances in signal strength 
 
+
+Sensitivity to tag direction
+```{r}
+# by tag orientation
+Tag_Data %>%
+      group_by(distance_cm) %>%
+      filter(distance_cm <= 200) %>%
+      ggplot( aes(y=RSSI, x= distance_cm, color= type_parallel)) +
+      geom_jitter(alpha = .8) 
+
+#dulog comparison
+Tag_orientation_p <- function(Tag) {
+      Tag_Data %>%
+       filter(distance_cm <= 200) %>%
+      filter(tag== Tag) %>%
+      group_by(distance_cm, type_parallel) %>%
+      mutate(dist_pos = paste(distance_cm, type_parallel, sep = "_")) %>%
+      mutate(dist_pos = fct_reorder(dist_pos, distance_cm)) %>%
+      ggplot( aes(y=RSSI, x= as.factor(distance_cm), fill= type_parallel)) +
+      geom_violin(alpha = .8) +
+      xlab("Tag Distance") +
+      ylab("Signal Strength (RSSI)") + 
+      scale_fill_discrete(name = "Tag Orientation") +
+      ggtitle(paste(Tag, "signal strength by tag orientation and distance", sep = " "))
+      
+}
+
+Tag_orientation_p(Tag = "dulog")
+Tag_orientation_p(Tag = "proxlog")
+
+
+#summarize differences between groups at each point (not adjusted for multiple comparisons)
+Tag_Data %>%
+      filter(distance_cm <= 200) %>%
+      group_by(distance_cm, tag) %>%
+      summarize(T_test = t.test(RSSI[type_parallel=="parallel"], RSSI[type_parallel=="moved"])$p.value)
+
+
+```
+The orientation of the tag does not seem to have a consistent effect for either tag, though the positions in this test were not highly standard. 
 
 
 ##############
