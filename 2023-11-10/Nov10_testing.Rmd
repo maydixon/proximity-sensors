@@ -4,29 +4,31 @@ output: html_notebook
 ---
 
 
-We ran a test to compare the performance of dulog and proxlog tags under standardized conditions. In each test, we placed 5 tags on a grid with "North", "South", "East", "West", and "Center" as their positions. In the first test "ten-parallel", each tag on a cardinal direction was 10cm from the central tag, with all the tags facing in roughly the same orientation ("parallel"), and kept for about 10 minutes. Later tests (50, 100, 200...) the tags were moved 50 cm from the center, and so on. For the 10-100 distances, we also ran tests where we rotated the tags so that they faced in haphazard directions ("moved" tests)
-Write abstract with Summary
-From the ground up thing in the beginning 
-Here is the beginning, and here are the results 
+We ran a test to compare the performance of dulog and proxlog tags under standardized conditions. In each test, we placed 5 tags on a grid with "North", "South", "East", "West", and "Center" as their positions. In the first test "ten-parallel", each tag on a cardinal direction was 10cm from the central tag, with all the tags facing in roughly the same orientation ("parallel"), and kept for about 10 minutes. Later tests (50, 100, 200, 300...600) the tags were moved 50 cm from the center, and so on. For the 10-100 distances, we also ran tests where we rotated the tags so that they faced in haphazard directions ("moved" tests). For each test, we estiamted the distance of each tag from all the other tags. We also discuss other ways that the tags compare. 
 
-- variation across tags at a given distance in signal 
-            - calc standard deviation by group, plot sd
-            - test for significant differences between groups @ given distance?  (groupby distance/ whatever sd comparison test bt tag)
-            - to compare variance between groups: levene test, brown-forsythe test, Bartlett's test (more powerful)
-            - try standarizing the values? subtract or add from each? 
-            
-      - percent variance? (look at difs in means?)
+Results Summary: 
 
-- signal strength with distance across different tags
+Tag hardware: 
+    The Proxlog tags have slightly better hardware. They do not have antennas and are easier to attach to their batteries. The dulog version we have has the battery terminal directly above another chip, making them easy to damage while connecting the battery. There is also no easy way to know the status of the batteries.
+    The Proxlogs rely on Blutooth, whereas the dulogs rely on Wifi in a public band. Both can be interfered with if there are other similar signals in the nearby area. It is possible that the proxlog bluetooth could interact with the bluetooth from Biomark RFID remote download. 
+    Dulogs have much better battery life. [] insert link here. 
+    
+      
+Interface: 
+    Proxlog tags have an easier interface: they are controlled with an user friendly app, and can be updated immediately and remotely. They also come with a convenient battery charger, which is easier than the dulog charging system. Dulog settings have to be modified on a program on the computer, then placed in to the basestation, and each tag turned on to update them, and there is a system of lights to let you know what is happening. Ours also do not download until an hour has overlapped, and they seem to be somewhat irregular in when and how much they download.  There is an updated tag model with an app. 
+    On the other hand, Dulogs have more flexibility in their recording settings: for example, you can program them to record every 2 seconds during the night, and once an hour during the day. 
  
-- compare sensitivity to tag direction across the different tags
-different in signal strength or not? what % weaker
-- Differences within each group? 
-- % pr probability is useful as a statistic ()
-- battery performance 
-- saline glove and flight cage conditions
-- 
-
+ Signal strength: 
+      Dulogs and Proxlogs use different technology, and the values for signal strength (RSSI) are different (a mean difference of 45 at 10cm).
+      Number of detected contacts:
+      Both tags performed well at 100cm, but declined in the number of contacts detected at higher distances. Dulogs had more contacts detected at 400 and 500 cm whereas proxlog had almost none. 
+      Dulogs were MUCH more consistent in the number of reads per tag than Proxlogs. (for example, a sd of 0.47 vs 271 at 50cm. )
+ 
+Variation in signal strength at a given distance: 
+      The tags have a similar amount of variation in signal strength at a given distance, and seem to be similarly sensitive to tag directionality. 
+     
+Other performance issues: 
+     Dulog made up many more fake tag ids (a result of interference), and recording times. 
 
 ```{r}
 library(tidyverse)
@@ -34,16 +36,7 @@ library(readr)
 library(lubridate)
 ```
 
-Goals: 
-1. see the number of reads from each tag
-2. tag each meeting by pairwise distance
-     --- convert times into datetimes? 
-     --- if datetime  between X and X, joinby?  
-3. compare rssi by distance
-
-
-
-
+Data wrangling
 ```{r import data}
 
 
@@ -407,7 +400,7 @@ Tag_Data <- Tag_Data %>%
 ```
 
 
-reads from all meetings, by trial type
+# reads from all meetings, by trial type
 ```{r}
 #number of meetings faceted by test_type
 
@@ -421,7 +414,30 @@ reads from all meetings, by trial type
       geom_bar() + 
       facet_wrap(~test_type_tag, scales="free_x", ncol = 2) 
      
+# for each test/tag type, summarize the mean # of contacts/tagID and the variance. 
+Tag_read_variance <- 
+      Tag_Data %>%
+       group_by(test_type_tag, RX_Node) %>%
+       summarize(n=n())%>%
+       pivot_wider(names_from = RX_Node, values_from = n) %>%
+       rowwise() %>%
+        mutate(
+       mean = mean(c_across(2:9), na.rm = TRUE),
+      sd = sd(c_across(2:10), na.rm = TRUE)
+      ) %>%
+       ungroup() %>%
+       select(test_type_tag, mean, sd) %>%
+       separate_wider_delim(test_type_tag, delim = "_", names = c("test", "type", "tag")) %>%
+       mutate(test_type = paste(test, type,  sep = "_")) %>%
+       select(-c(test, type)) %>%
+       relocate(test_type)
+Tag_read_variance
 
+ Tag_read_variance %>%
+       mutate(test_type = fct_relevel(test_type, c("ten_parallel", "ten_moved", "fifty_parallel", "fifty_moved", "hundred_parallel", "hundred_moved", "twohundred_parallal", "threehundred_parallel", "fourhundred_parallel"))) %>%
+       ggplot(aes(x= test_type, y= sd, fill=tag)) +
+       geom_bar(stat = "identity", position = "dodge") +
+       ggtitle("standard deviation in # of reads between different tags in a trial")
 
 ```
 
