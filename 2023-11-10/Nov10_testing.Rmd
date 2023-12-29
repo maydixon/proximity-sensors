@@ -1,6 +1,8 @@
 ---
 title: "Proximity sensor testing Nov 10"
-output: html_notebook
+output:
+  pdf_document: default
+  html_notebook: default
 ---
 
 
@@ -30,73 +32,63 @@ Variation in signal strength at a given distance:
 Other performance issues: 
      Dulog made up many more fake tag ids (a result of interference), and recording times. 
 
-```{r}
+```{r setup, echo= FALSE}
+
+```
+
+
+```{r, include = FALSE}
 library(tidyverse)
 library(readr)
 library(lubridate)
 ```
 
-Data wrangling
-```{r import data}
+--> Data wrangling: import data
+```{r import data, include = FALSE}
 
+# test_table defines the times when each test was conducted
 
-#test_table <- read.csv("https://raw.githubusercontent.com/maydixon/proximity-sensors/main/test_table.csv", sep=",", header=TRUE ) #stringsAsFactors = F
+# Use this code if pulling test_table from github (double check github sometimes pulls csvs in weird) 
+ test_table <- read_csv("https://raw.githubusercontent.com/maydixon/proximity-sensors/real/test_table_nov10.csv") 
 
-test_table <- read_csv("test_table_nov10.csv")
+# Use this code if reading test_table from local working directory
+#test_table <- read_csv("test_table_nov10.csv")
 
+# Import Dulog Data: 
+# Dulog data can be downloaded to working directory from here (too big to load in directly)
+# https://github.com/maydixon/proximity-sensors/raw/real/Dulog_Nov10.CSV
+# DU_DATA <- read_csv("Dulog_Nov10.CSV")
 
-# MN_DATA_nov7_2 <- read.csv("https://raw.githubusercontent.com/maydixon/proximity-sensors/blob/main/23-11-08/15-51-42/MN_DATA.CSV",sep=",", header=TRUE, stringsAsFactors = F )
-# for some reason reading in with a lagging line
-
+#alternatively use this: 
 DU_DATA <- read_csv("dulog/23-11-10/17-00-24/MN_DATA_17-00-24.CSV")
 DU_DATA <- DU_DATA %>%
-      mutate(tag = "dulog") 
+      mutate(tag = "dulog")
 
- #remove spaces from DU_DATA column names
+ 
+#remove spaces from DU_DATA column names
 colnames(DU_DATA) <- sub(" ", "_", colnames(DU_DATA))
 
 
 
-#for some obnoxious reason, L3 and L4 read in with col names automatically with read_CSV, and the others don't 
- 
 
 # import proxlog data- take all the files in a folder and pull them into the same dataframe
+# (for some obnoxious reason, L3 and L4 read in with col names automatically with read_CSV, and the others don't, so I used read.csv)
 PR_DATA <- list.files(path = "proxlog real test/",  # Identify all CSV files with L in the name
                        pattern = "L", full.names = TRUE) %>% #
   lapply(read.csv, col.names = c("RX_Node","TX_Node","Date_Time", "RSSI")) %>%                              # Store all files in list
   bind_rows         %>%                     # Combine data sets into one data set 
   mutate(tag = "proxlog") #add proxlog to all rows
 
-### not needed anymore
-
-# L1<- read.csv("proxlog real test/L1.CSV", col.names=c("RX_Node","TX_Node","Date_Time", "RSSI"), fill=TRUE, header=TRUE)
-# L2<- read.csv("proxlog real test/L2.CSV")
-# L3<- read.csv("proxlog real test/L3.CSV", col.names = c("RX_Node","TX_Node","Date_Time", "RSSI"))
-# L4<- read.csv("proxlog real test/L4.CSV", col.names = c("RX_Node","TX_Node","Date_Time", "RSSI"))
-# L5<- read_csv("proxlog real test/L5.CSV")
-# P_list<- list(L1, L2, L3, L4, L5)
-# lapply(P_list, View)
-
-
-
-
-str(PR_DATA)
 
 ```
 
-FIX Dulog date/time
-```{r}
-
-
+--> Data wrangling: fix and standardize Dulog and data_table, and proxlog date/times
+```{r, include = FALSE}
 #put date time in one column for DU_DATA
 DU_DATA <- DU_DATA %>%
        mutate(Date_Time = make_datetime(year = Meeting_Year, month = Meeting_Month, day = Meeting_Day, hour = Meeting_Hour,min =  Meeting_Minute, sec = Meeting_Second, tz="America/New_York")) #Etc/GMT-5
-head(DU_DATA$Date_Time)
 
-```
 
-fix test table date/time, add timezone
-```{r}
 # put date time in one column for reference table
 test_table <- test_table %>%
       mutate(start_time = make_datetime(year = start_year, month = start_month, day = start_day, hour = start_hour, min =  start_minute, sec = start_second), 
@@ -106,42 +98,27 @@ str(test_table)
 #Force into same timezone
 test_table$start_time <-  force_tz(test_table$start_time, tzone = "America/New_York")
 
-head(test_table$start_time)
-class(test_table$start_time)
-```
 
+# correct data and time for PR_DATA
 
-
-correct data and time for PR_DATA
-convert to POSIX
-change to same time format as other dataset
-```{r PR_DATA date time}
-
-
-#convert character to date time format of data (tz is the default GMT timezone the tags record in)
+# PR_DATA, convert character to POSIX (OG timezone is a default GMT )
 PR_DATA$Date_Time <-  as.POSIXlt(PR_DATA$Date_Time, format ="%d/%m/%Y %H:%M:%S", tz= "Etc/GMT" )
-head(PR_DATA$Date_Time)
 
-#change to real time zone
+#change to real time zone, same format as other dataset
 PR_DATA$Date_Time<- with_tz(PR_DATA$Date_Time, tzone = "America/New_York")
 head(PR_DATA$Date_Time)
 head(PR_DATA)
-```
 
-combine Proxlog and and Dulog datasets
-```{r}
 
-#for now dropping all the receiving ID/ download time columns from Dulog, could keep with rbind fill = TRUE
+# Combine Proxlog and and Dulog datasets
+
+# (for now dropping all the receiving ID/ download time columns from Dulog, could keep with rbind fill = TRUE)
+
 Tag_Data <- DU_DATA %>%
       select(RX_Node, TX_Node, Date_Time, RSSI, tag ) %>%
       rbind(PR_DATA)
-head(Tag_Data$Date_Time)
 
 
-```
-
-add p or d to tag along with NSEWC for test table 
-```{r}
 # Make tag names indicate tag type (d or p), then position (SNEWC), then unique ID e.g. "69"
 #if rerunning run from top
 test_table <- test_table %>%
@@ -149,14 +126,8 @@ test_table <- test_table %>%
              TX_Node = paste(Tag_B_position, tag_B, sep = "")) %>%
       mutate_at( c("RX_Node", "TX_Node"), funs(ifelse(tag=="dulog", paste("d", ., sep=""), paste("p", ., sep=""))))
 
-    
-      
-```
 
-Add positions and tag labels to Tag_Data (N, S E W to tag titles)
-```{r}
-
-# add cardinal position to each tag type and tag brand
+# add cardinal position (N, S E W, C) to each tag type and tag brand
 Tag_Data <- Tag_Data %>%
       mutate_at(vars("RX_Node","TX_Node"), ~ as.character(.)) %>%
      mutate_at(vars("RX_Node","TX_Node"), ~ case_when( . == "1"|. == "69" ~ paste("N", ., sep = ""), # add position to all tags
@@ -170,21 +141,7 @@ Tag_Data <- Tag_Data %>%
        mutate_at( vars("RX_Node", "TX_Node"), ~ ifelse(tag=="dulog", paste("d", ., sep=""), paste("p", ., sep=""))) #add tag brand to each tag id 
       
 
-
-     
-
-
-#come back later to figure out why each group only has 4 tags! 
-```
-#come back later to figure out why each group only has 4 tags! 
-
-
-
-Combine sender and receiver in all docs, make directionless
-```{r}
-head(Tag_Data)
-
-#make combined receiver sender column RX_TX, and directionless dyad column 
+#make combined receiver/ sender column "RX_TX", and a directionless dyad column "dyad"
 Tag_Data <- Tag_Data %>%
       mutate( RX_TX = paste(RX_Node, TX_Node, sep = "_")) %>% #receiver/ sender
       mutate(Dyad = ifelse(RX_Node < TX_Node, RX_TX, paste(TX_Node, RX_Node, sep = "_"))  ) # directionless dyad
@@ -195,21 +152,21 @@ test_table <- test_table %>%
       mutate(Dyad = ifelse(RX_Node < TX_Node, RX_TX, paste(TX_Node, RX_Node, sep = "_"))  )
 
 
-#make separate columns for test distance and tag orientation
+#make separate dummy columns columns for test distance and tag orientation
 test_table <- test_table %>%
       mutate( test_type = paste(test, type_parallel, sep = "_"))
 
-```
 
-Add trial types to Tag_Data by time range
-```{r}
-#show each of the time values 
+
+# Add trial types to Tag_Data by time range
+
+# Show each of the time values 
 test_table %>%
       select(tag, test_type, start_time, end_time) %>%
       group_by(tag, test_type)%>%
       filter(row_number()==1) %>% filter(tag== "dulog")
 
-
+# add the trial type to each data read (row) taken during that trial
 Tag_Data <- Tag_Data %>%
       mutate(test_type = case_when(
 Date_Time >= as.POSIXct("2023-11-10 12:29:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2023-11-10 12:39:00", tz = "America/New_York") ~ "ten_parallel",
@@ -235,11 +192,10 @@ Date_Time >= as.POSIXct("2023-11-10 14:07:00	", tz = "America/New_York") & Date_
 Date_Time >= as.POSIXct("2023-11-10 14:12:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2023-11-10 14:15:00", tz = "America/New_York") ~ "sixhundred_parallel",
 .default = "group_no"
 ))
-```
 
-join reference test-table with known distances and Tag_Data 
-make a dummy variable with unique trial and dyad, match with that
-```{r}
+
+# join reference test-table with known distances and Tag_Data 
+
 # make dummy variables for joining test_table and Tag_Data
 test_table <- test_table %>%
       mutate( Dyad_test_type = paste(Dyad, test_type, sep = "_"))
@@ -260,14 +216,13 @@ Tag_Data <- Tag_Data %>%
 Tag_Data <- Tag_Data %>% 
       mutate_at(vars(RX_Node, TX_Node), ~  factor(., ordered = TRUE)) 
 
-
 ```
 
 
 ## Data analysis
 
-Meetings recorded by receiving tags by time - Looking at only the day we recorded (Nov 10)
-```{r}
+Contacts (meetings between tags) recorded by receiving tags by time - Looking at only the day we recorded (Nov 10)
+```{r, echo = FALSE}
 
   # a lot of data from the 7th, also a random one from the 20th 
  
@@ -280,12 +235,12 @@ Tag_Data %>%
       geom_point()
 
 ```
-While Dulog did download data from a previous day, which is normal, it also made up some weird date-times. (tag 42 had a read from the next year a,and a month previously
+While Dulog did download data from a previous day, which is normal, it also made up some weird date-times. (tag 42 had a read from the next year, and one from a month previously)
 
-Its also strange that only 2 of the dulogs recorded in the evening, when i downloaded the data, as they were all on and right next to each other. 
+Its also strange that only 2 of the dulogs recorded in the evening, when I downloaded the data, as they were all on and right next to each other. 
 
-Meetings recorded by transmitting tags by time 
-```{r}
+Meetings recorded by transmitting tags by time:
+```{r, echo = FALSE}
 Tag_Data %>% 
      filter(Date_Time > as.POSIXct('2023-11-10 00:00:01', tz= "ETC")) %>%
        filter(Date_Time < as.POSIXct('2023-11-10 23:59:59', tz= "ETC")) %>%
@@ -298,18 +253,16 @@ Dulog also made up a bunch of fake transmitting tags at weird times
  
 
 
-Include only data from the 10th in subsequent analyses
-```{r}
+--> Only data from the 10th, from tests included in subsequent analyses
+```{r, echo = FALSE}
 Tag_Data  <- Tag_Data %>% 
      filter(Date_Time > as.POSIXct('2023-11-10 00:00:01', tz= "ETC")) %>%
        filter(Date_Time < as.POSIXct('2023-11-10 23:59:59', tz= "ETC")) 
 
 
-```
+# also cut dulog dataset off after 14:15 (tags were left close to each other later, overlapping with testing other tags)
+# also only show data from real tests (cut all group_nos)
 
-also cut dulog dataset off after 14:15 (tags were left close to each other later, overlapping with testing other tags)
-also only show data from real tests (cut all group_nos)
-```{r}
 
 Tag_Data <- Tag_Data %>% filter((tag != "dulog") | (tag == "dulog" & Date_Time < as.POSIXct('2023-11-10 14:30:00'))) %>% #keep all rows where tag is not dulog or time later than 2:30. 
       filter(test_type!= "group_no")
@@ -318,11 +271,11 @@ Tag_Data <- Tag_Data %>% filter((tag != "dulog") | (tag == "dulog" & Date_Time <
 Tag_Data %>% group_by(tag) %>% summarize(n=n(), max = max(Date_Time), min= min(Date_Time))
 
 ```
-This shows that the tags didn't download anything after 2pm. Probably bc nothing after the hour downloaded (though we gave them an opportunity to later, but possibly bc these were mostly the 5 and 6m from center tests)
+This shows that the tags didn't download anything after 2pm. Probably bc nothing after the hour downloaded (though we gave them an opportunity to later, but possibly bc these were mostly the 5 and 6m from center tests, where few contacts were recorded)
 
 
 Total number of reads transmitted and received by each individual tag
-```{r}
+```{r, echo = FALSE}
 #number of meetings transmitted and received by each tag
 Tag_Data %>%
       group_by(tag, TX_Node) %>%
@@ -351,11 +304,10 @@ Tag_Data %>%
 ```
 Both tags had some weird IDs, that we did not use at the time. Dulog had more. 
 
-A little concerning that some sensors had far more reads than others, but let's check the read number only for a time when we know all tags should have been in range (10cm), and for a standard unit of time 
+It is little concerning that some sensors had far more reads than others, but let's check the read number only for a time when we know all tags should have been in range (10cm), and for a standard unit of time 
 
 
-# add positions (NSEWC)
-```{r}
+```{r, echo = FALSE}
 #number of meetings receieved by each tag for 10 parallel
  #transmitted at 10 parallel
 Tag_Data %>%
@@ -386,8 +338,8 @@ Tag_Data %>%
 At known ranges, dulog had much more even receiving read rates than proxlogs, which are *really* variable
 Neither of the tags did a great job at transmitting even # of meetings when the tags were all well within range (one of the dulog tags transmitted a bunch more than the others, the proxlogs are all over the map)
 
-Get rid of weird values, order test_type
-```{r}
+--> Get rid of weird values, order test_type
+```{r, echo = FALSE}
 # only data from real tags (presumably Dyads with more than 10 readings)
 
 Tag_Data <- Tag_Data %>%
@@ -400,8 +352,8 @@ Tag_Data <- Tag_Data %>%
 ```
 
 
-# reads from all meetings, by trial type
-```{r}
+Reads from all meetings, by trial type:
+```{r, echo = FALSE}
 #number of meetings faceted by test_type
 
  Tag_Data %>%
@@ -446,7 +398,7 @@ Dulog reads more evenly than proxlog
 
 
 Signal Strength (RSSI) by Distance
-```{r}
+```{r, echo = FALSE}
 Tag_Data$RSSI <- as.numeric(Tag_Data$RSSI)
 
 
@@ -500,8 +452,8 @@ str(Tag_Data)
 Proxlog and Dulog use different signals, so they have different signal strengths at the same distances. 
 Proxlog declines logarithmically, is especially steep at low distances. Dulog initially declines very precipitously and later declines  linearly. 
 
-Differences in signal strength variance by group
-```{r}
+Differences in signal strength variance by group:
+```{r, echo = FALSE}
 sd_tags <- Tag_Data %>%
       filter(distance_cm < 600 ) %>%
   group_by( distance_cm, tag) %>%
@@ -539,8 +491,8 @@ There is no obvious difference in the variation in signal strength between the t
 At small distances, both tags have about the same variance, and at larger distances, dulogs seem to have higher variances in signal strength 
 
 
-Sensitivity to tag direction
-```{r}
+Sensitivity to tag direction:
+```{r, echo = FALSE}
 # by tag orientation
 Tag_Data %>%
       group_by(distance_cm) %>%
@@ -569,7 +521,13 @@ Tag_orientation_p(Tag = "dulog")
 Tag_orientation_p(Tag = "proxlog")
 
 
-#summarize differences between groups at each point (not adjusted for multiple comparisons)
+
+Tag_Data %>%
+      filter(distance_cm <= 200) %>%
+      group_by(distance_cm, tag, type_parallel) %>%
+       filter(test_type == "ten_moved")
+#return here
+#summarize differences in orientation at each distance (not adjusted for multiple comparisons)
 Tag_Data %>%
       filter(distance_cm <= 200) %>%
       group_by(distance_cm, tag) %>%
