@@ -92,7 +92,7 @@ library(lubridate)
 # test_table defines the times when each test was conducted
 
 # Use this code if pulling test_table from github (double check github sometimes pulls csvs in weird) 
- test_table <- read_csv("https://raw.githubusercontent.com/maydixon/proximity-sensors/real/test_table_nov10.csv") 
+ test_table <- read_csv("https://raw.githubusercontent.com/maydixon/proximity-sensors/real/test_table_Jan26.csv") 
 
 # Use this code if reading test_table from local working directory
 #test_table <- read_csv("test_table_nov10.csv")
