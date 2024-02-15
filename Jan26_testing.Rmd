@@ -104,9 +104,6 @@ Tag number test (test 10 vs 5 tags to see if there is more data loss with 10 )
 #OR A TEST TABLE with just all tests
 # add test info
 # combine with tag- data
-```{r setup, echo= FALSE}
-# set up 
-```
 
 
 ```{r, include = FALSE}
@@ -154,6 +151,11 @@ test_table <- test_table %>%
              end_time = make_datetime(year = end_year, month = end_month, day = end_day, hour = end_hour, min =  end_minute, sec = end_second))
 
 
+#Force into same timezone
+test_table$start_time <-  force_tz(test_table$start_time, tzone = "America/New_York")
+test_table$end_time <-  force_tz(test_table$end_time, tzone = "America/New_York")
+
+
 #Make test_table for the test of whether more tags causes more data loss (all tags in 20cm circle, either 5 or 10 tags activated)
 #entering the text_table directly here, to take advantage of complete() for making all possible dyads
 
@@ -162,7 +164,7 @@ test_table <- test_table %>%
 X=10 #length of longest variable (tag_A and B here)
 ntags_test_table <- tibble(
   tag = c(rep("proxlog", length.out = X)),
-  test = c(rep(c("20cmcircle_10p_10s_750d_1","20cmcircle_5p_10s_750d_1", "20cmcircle_10p_5s_750d_2", "20cmcircle_5p_10s_750d_2"), length.out = X)),
+  test = c(rep(c("20cmcircle_10p_10s_750d_1","20cmcircle_5p_10s_750d_1", "20cmcircle_10p_10s_750d_2", "20cmcircle_5p_10s_750d_2"), length.out = X)),
     tag_A = c(1:7,9:11), 
   tag_B = c(1:7,9:11),
   start_time = as.POSIXct(c(rep(c("2024-01-27 00:13:00", "2024-01-27 00:20:00", "2024-01-27 00:26:00", "2024-01-27 00:33:00"), length.out = X))),
@@ -181,11 +183,9 @@ test_table <- bind_rows(test_table, ntags_test_table)
 ```
 
 ```{r}
-#Force into same timezone
-test_table$start_time <-  force_tz(test_table$start_time, tzone = "America/New_York")
 
 
-# correct data and time for PR_DATA
+# correct date and time for PR_DATA
 
 # PR_DATA, convert character to POSIX (OG timezone is a default GMT )
 PR_DATA$Date_Time <-  as.POSIXlt(PR_DATA$Date_Time, format ="%d/%m/%Y %H:%M:%S", tz= "Etc/GMT" )
@@ -199,7 +199,7 @@ head(PR_DATA)
 
 Tag_Data <- PR_DATA
 
-
+#rename tagA to RX_Node
 # Make tag names indicate tag type (d or p), then position (SNEWC), then unique ID e.g. "69"
 #if rerunning run from top
 test_table <- test_table %>%
@@ -209,9 +209,10 @@ test_table <- test_table %>%
 
 
 # add cardinal position (N, S E W, C) to each tag type and tag brand
+# really only for the grid tests
 Tag_Data <- Tag_Data %>%
       mutate_at(vars("RX_Node","TX_Node"), ~ as.character(.)) %>%
-     mutate_at(vars("RX_Node","TX_Node"), ~ case_when( . == "1" ~ paste("C", ., sep = ""), # add position to all tags
+      mutate_at(vars("RX_Node","TX_Node"), ~ case_when( . == "1" ~ paste("C", ., sep = ""), # add position to all tags
                                                        . == "2" ~ paste("S", ., sep = ""),
                                                        . == "3" ~ paste("W", ., sep = ""),
                                                        . == "4" ~ paste("E", ., sep = ""),
@@ -250,14 +251,31 @@ test_table %>%
 # add the trial type to each data read (row) taken during that trial
 Tag_Data <- Tag_Data %>%
       mutate(test_type = case_when(
-Date_Time >= as.POSIXct("2024-01-25 23:55:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-26 00:00:00", tz = "America/New_York") ~ "1mgrid_5p_2s_750d_parallel",
+Date_Time >= as.POSIXct("2024-01-25 23:55:00", tz = "America/New_York") & Date_Time <=   as.POSIXct("2024-01-26 00:00:00", tz = "America/New_York") ~ "1mgrid_5p_2s_750d_parallel",
+
 Date_Time >= as.POSIXct("2024-01-26 00:01:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-26 00:06:00", tz = "America/New_York") ~ "1mgrid_5p_2s_15d_parallel",
+
 Date_Time >= as.POSIXct("2024-01-26 00:08:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-26 00:13:00", tz = "America/New_York") ~ "1mgrid_5p_10s_750d_parallel",
+
 Date_Time >= as.POSIXct("2024-01-26 00:15:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-26 00:20:00", tz = "America/New_York") ~ "1mgrid_5p_20s_750d_parallel",
-Date_Time >= as.POSIXct("2024-01-26 00:28:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-26 23:00:00", tz = "America/New_York") ~ "1mgrid_5p_2s_750d_2_parallel",
+
+Date_Time >= as.POSIXct("2024-01-26 00:28:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-26 23:00:00", tz = "America/New_York") ~ "1mgrid_5p_2s_750d_2_parallel", 
+
+Date_Time >= as.POSIXct("2024-01-27 00:13:00", tz = "America/New_York") & Date_Time <=  as.POSIXct("2024-01-27 00:18:00", tz = "America/New_York") ~ "20cmcircle_10p_10s_750d_1_NA", 
+
+Date_Time >= as.POSIXct("2024-01-27 00:20:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-27 00:25:00", tz = "America/New_York") ~ "20cmcircle_5p_10s_750d_1_NA",
+
+Date_Time >= as.POSIXct("2024-01-27 00:26:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-27 00:31:00", tz = "America/New_York") ~ "20cmcircle_10p_10s_750d_2_NA",
+
+Date_Time >= as.POSIXct("2024-01-27 00:33:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-27 00:38:00", tz = "America/New_York") ~ "20cmcircle_5p_10s_750d_2_NA",
+
 .default = "group_no"
 ))
 
+
+```
+
+```{r}
 
 # join reference test-table with known distances and Tag_Data 
 
@@ -281,44 +299,39 @@ Tag_Data <- Tag_Data %>%
 Tag_Data <- Tag_Data %>% 
       mutate_at(vars(RX_Node, TX_Node), ~  factor(., ordered = TRUE)) 
 
+#make date time posixct
+Tag_Data$Date_Time <-  as.POSIXct(Tag_Data$Date_Time, tz= "ETC")
+
 ```
 
 
 ## Data analysis
 
-When did the tags record contacts (meetings between tags?) (Should be between ~23:50 Jan 25 and 23:00 Jan 26) 
+When did the tags record contacts (meetings between tags?) (Should be between ~23:50 Jan 25 and 23:00 Jan 26, between 00:00-00:40 Jan 27  
 ```{r, echo = FALSE}
 
  
  class(Tag_Data$Date_Time)
+#cut out times from before the loggers updated the default time
+Tag_Data <- Tag_Data %>% 
+     filter(Date_Time > as.POSIXct('2023-11-10 00:00:01', tz= "ETC")) 
 
-
+#meetings received
 Tag_Data %>% 
       ggplot( aes(y=RX_Node, x= as.POSIXct(Date_Time), color= tag)) +
       geom_point()
 
-
-
-```
-All 5 tags recorded meetings on the expected time ranges
-
-
-### Meetings recorded by transmitting tags by time
-
-tags should have transmitted over the same time range, and did. 
-```{r, echo = FALSE}
+### Meetings transmitted by time
 Tag_Data %>% 
       ggplot( aes(y=TX_Node, x= as.POSIXct(Date_Time), color= tag)) +
       geom_point() 
-
 ```
+All tags recorded meetings on the expected time ranges
 
 
 
+From here on out, the data should only include contacts recorded during tests
 ```{r, echo = FALSE}
-
-Tag_Data$Date_Time <-  as.POSIXct(Tag_Data$Date_Time, tz= "ETC")
-class(Tag_Data$Date_Time)
 
 
 #only include the tags from known tests
@@ -326,79 +339,27 @@ Tag_Data <- Tag_Data %>%
       filter(test_type!= "group_no")
 
 #show the new max and min times for each tag
-Tag_Data %>% summarize(n=n(), max = max(Date_Time), min= min(Date_Time))
+Tag_Data %>% 
+      group_by(RX_Node) %>%
+      summarize(n=n(), max = max(Date_Time), min= min(Date_Time))
 
 ```
 
 
 Total number of reads transmitted and received by each individual tag
-```{r, echo = FALSE}
-#number of meetings transmitted and received by each tag
-Tag_Data %>%
-      group_by( TX_Node) %>%
-      summarise(n=n())
-
-
-
-#number of meetings received by each tag
-Tag_Data %>%
-      group_by( RX_Node) %>%
-      summarise(n=n())
-
-
-Tag_Data %>%
-      ggplot( aes(x= RX_Node)) +
-      geom_bar() + 
-      facet_wrap(~tag, scales="free_x") +
-      xlab("# of Contacts Received")
-
-```
-Both tags had some weird IDs, that we did not use at the time. Dulog had more. 
-
-It is little concerning that some sensors had far more reads than others, but let's check the read number only for a time when we know all tags should have been in range (10cm), and for a standard unit of time 
-
-
-```{r, echo = FALSE}
-#number of meetings receieved by each tag for 10 parallel
- #transmitted at 10 parallel
-Tag_Data %>%
-      filter(test_type == "ten_parallel") %>%
-      group_by(tag, RX_Node) %>%
-      summarise(n=n())
-
-
-Tag_Data %>%
-      filter(test_type == "ten_parallel") %>%
-      ggplot( aes(x= RX_Node)) +
-      geom_bar() + 
-      facet_wrap(~tag, scales="free_x")
-
-#transmitted at 10 parallel
-Tag_Data %>%
-      filter(test_type == "ten_parallel") %>%
-      group_by(tag, TX_Node) %>%
-      summarise(n=n())
-
-Tag_Data %>%
-      filter(test_type == "ten_parallel") %>%
-      ggplot( aes(x= TX_Node)) +
-      geom_bar() + 
-      facet_wrap(~tag, scales="free_x")
-
-```
-At known ranges, dulog had much more even receiving read rates than proxlogs, which are *really* variable
-Neither of the tags did a great job at transmitting even # of meetings when the tags were all well within range (one of the dulog tags transmitted a bunch more than the others, the proxlogs are all over the map)
 
 --> Get rid of weird values, order test_type
 ```{r, echo = FALSE, include = FALSE}
-# only data from real tags (presumably Dyads with more than 10 readings)
 
+unique(Tag_Data$test_type)
+
+# only data from real tags (presumably Dyads with more than 10 readings)
 Tag_Data <- Tag_Data %>%
       group_by(Dyad) %>% #get rid of weird made-up tag values
       filter(n() > 10) %>% #get rid of weird made-up tag values (fewer than 10 observations)
        mutate( test_type_tag = paste(test_type, tag, sep = "_")) %>%
       ungroup() %>% #now order test type
-       mutate(test_type_tag= fct_relevel(test_type_tag,  c("ten_parallel_dulog", "ten_parallel_proxlog", "ten_moved_dulog", "ten_moved_proxlog", "fifty_parallel_dulog", "fifty_parallel_proxlog", "fifty_moved_dulog", "fifty_moved_proxlog", "hundred_parallel_dulog", "hundred_parallel_proxlog", "hundred_moved_dulog", "hundred_moved_proxlog", "twohundred_parallel_dulog", "twohundred_parallel_proxlog", "threehundred_parallel_dulog","threehundred_parallel_proxlog", "fourhundred_parallel_dulog", "fourhundred_parallel_proxlog", "fivehundred_parallel_dulog", "fivehundred_parallel_proxlog", "sixhundred_parallel_dulog"  )))
+       mutate(test_type_tag= fct_relevel(test_type_tag,  c( "ten_parallel_proxlog", "ten_moved_dulog", "ten_moved_proxlog", "fifty_parallel_dulog", "fifty_parallel_proxlog", "fifty_moved_dulog", "fifty_moved_proxlog", "hundred_parallel_dulog", "hundred_parallel_proxlog", "hundred_moved_dulog", "hundred_moved_proxlog", "twohundred_parallel_dulog", "twohundred_parallel_proxlog", "threehundred_parallel_dulog","threehundred_parallel_proxlog", "fourhundred_parallel_dulog", "fourhundred_parallel_proxlog", "fivehundred_parallel_dulog", "fivehundred_parallel_proxlog", "sixhundred_parallel_dulog"  )))
       
 ```
 
@@ -406,6 +367,30 @@ Tag_Data <- Tag_Data %>%
 ### Reads transmitted from all meetings, by trial type
 ```{r, echo = FALSE, fig.height = 8}
 #number of meetings faceted by test_type
+
+#expected number of meetings per tag
+# tags-1 *#s /tag rate 
+ (5-1)*(5*60)/5
+
+#expected number of meetings per dyad per test
+(5*60)/5
+
+#average number of meetings per tag / test
+
+# max = max(Date_Time), min= min(Date_Time)
+
+
+Tag_Data %>% 
+      group_by(test_type, RX_Node) %>%
+      summarize(n=n(), min_t = min(Date_Time), max_t = max(Date_Time)) %>%
+      mutate(test_s = max_t-min_t) %>%
+      group_by(test_type) %>%
+      summarize(mean = mean(n), sd=sd(n), test_s = max(test_s)) #round to nearest 100? #
+#average number of meetings per dyad / test = #s in test/ rate
+
+#count min and max time 
+expected = # tags-1 *#s /tag rate 
+
 
  Tag_Data %>%
  ggplot( aes(x= TX_Node)) +
@@ -419,7 +404,15 @@ Tag_Data <- Tag_Data %>%
  Tag_Data %>%
  ggplot( aes(x= RX_Node)) +
       geom_bar() + 
-      facet_wrap(~test_type_tag, scales="free_x", ncol = 2) 
+      facet_wrap(~test_type, scales="free_x", ncol = 2) 
+
+for (var in unique(Tag_Data$test_type)) {
+    #dev.new()
+    print( ggplot(Tag_Data[Tag_Data$test_type==var,], aes(x= RX_Node)) +
+                        geom_bar()+
+                  ggtitle(var))
+}
+
 ```
 
 ### Mean and variance in number of contacts per tag type
