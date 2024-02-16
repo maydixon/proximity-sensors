@@ -4,6 +4,26 @@ output:
   pdf_document: default
   html_notebook: default
 ---
+TESTS: 
+Does downloading more often cause more data loss? (downloading to base station every time 15 reads are logged, vs every time 750 reads are logged) 
+
+       Compare baseline and high download rate to see if high download rate results in higher rates of data loss
+- % lost in 5 minutes  (over whole test) ( per tag, per dyad)
+- % lost every minute? 
+
+Compare baseline and lower sampling rate, and even lower sampling rate. Does a higher sampling rate cause more data loss? 
+- compare each tag and each dyad
+- convert to % loss --> reads observed/ reads expected *100
+
+
+Battery life: extract # of reads over each .5 hour for each tag, see if it declines over time. 
+histogram? time = hr? Summarize by time bins? 
+
+Tag number: 
+- Average data loss/ tag in 5 vs 10 treatments compare each tag and each dyad
+- convert to % loss --> reads observed/ reads expected *100
+
+
 	tag positions
 	5N (towards recording booths)
 	3W (towards exit)
@@ -12,7 +32,8 @@ output:
 	1C
 	
 	5 minutes each
-	 
+
+
 	((baseline))
 	11:55:00-12:00:00  
 	5 tags
@@ -86,19 +107,7 @@ Tag number test (test 10 vs 5 tags to see if there is more data loss with 10 )
 	Download at 750 reads
 
 	
-	_____
-	
-	# of tags A- low
-	5 tags
-	in circle
-	10 second sampling
-	download at 750 reads
-	
-	# of tags B- high
-	10 tags
-	in circle
-	10 second sampling
-	download at 750 read
+
 
 #make test table with all dyads
 #OR A TEST TABLE with just all tests
@@ -164,13 +173,13 @@ test_table$end_time <-  force_tz(test_table$end_time, tzone = "America/New_York"
 X=10 #length of longest variable (tag_A and B here)
 ntags_test_table <- tibble(
   tag = c(rep("proxlog", length.out = X)),
-  test = c(rep(c("20cmcircle_10p_10s_750d_1","20cmcircle_5p_10s_750d_1", "20cmcircle_10p_10s_750d_2", "20cmcircle_5p_10s_750d_2"), length.out = X)),
+  test = c(rep(c("20cmcircle_10p_5s_750d_1","20cmcircle_5p_5s_750d_1", "20cmcircle_10p_5s_750d_2", "20cmcircle_5p_5s_750d_2"), length.out = X)),
     tag_A = c(1:7,9:11), 
   tag_B = c(1:7,9:11),
   start_time = as.POSIXct(c(rep(c("2024-01-27 00:13:00", "2024-01-27 00:20:00", "2024-01-27 00:26:00", "2024-01-27 00:33:00"), length.out = X))),
   end_time = as.POSIXct(c(rep(c("2024-01-27 00:18:00", "2024-01-27 00:25:00", "2024-01-27 00:31:00", "2024-01-27 00:38:00"), length.out = X))),
   N_tags = c(rep(c(10,5,10,5), length.out = X)),
-  sample_rate = c(rep(10, length.out=X)),
+  sample_rate = c(rep(5, length.out=X)),
   download_rate = c(rep(750, length.out=X))
 ) %>%
       complete(test, tag_A, tag_B) %>% #make all possible dyad combinations
@@ -181,6 +190,10 @@ ntags_test_table
 #bind to test table 
 test_table <- bind_rows(test_table, ntags_test_table)
 ```
+
+
+
+
 
 ```{r}
 
@@ -199,38 +212,68 @@ head(PR_DATA)
 
 Tag_Data <- PR_DATA
 
-#rename tagA to RX_Node
-# Make tag names indicate tag type (d or p), then position (SNEWC), then unique ID e.g. "69"
-#if rerunning run from top
+#rename tagA to RX_Node, and rename cardinal positions
+# Make tag names indicate tag type (d or p), then unique ID e.g. "69"
 test_table <- test_table %>%
-      mutate(RX_Node = paste(TagA_position, tag_A,  sep = ""), 
-             TX_Node = paste(Tag_B_position, tag_B, sep = "")) %>%
+      rename(RX_Node = tag_A,
+             TX_Node = tag_B, 
+             RX_Position = TagA_position, 
+             TX_Position = Tag_B_position) %>%
       mutate_at( c("RX_Node", "TX_Node"), funs(ifelse(tag=="dulog", paste("d", ., sep=""), paste("p", ., sep=""))))
 
+#delete
+# test_table <- test_table %>%
+#       mutate(RX_Node = paste(TagA_position, tag_A,  sep = ""), 
+#              TX_Node = paste(Tag_B_position, tag_B, sep = "")) %>%
+#       mutate_at( c("RX_Node", "TX_Node"), funs(ifelse(tag=="dulog", paste("d", ., sep=""), paste("p", ., sep=""))))
+# 
 
-# add cardinal position (N, S E W, C) to each tag type and tag brand
+# don't do this
+#add cardinal position (N, S E W, C) to each tag type and tag brand
 # really only for the grid tests
+#make new columns to indicate locations of tags
 Tag_Data <- Tag_Data %>%
-      mutate_at(vars("RX_Node","TX_Node"), ~ as.character(.)) %>%
-      mutate_at(vars("RX_Node","TX_Node"), ~ case_when( . == "1" ~ paste("C", ., sep = ""), # add position to all tags
-                                                       . == "2" ~ paste("S", ., sep = ""),
-                                                       . == "3" ~ paste("W", ., sep = ""),
-                                                       . == "4" ~ paste("E", ., sep = ""),
-                                                       . == "5" ~ paste("N", ., sep = ""),
+      mutate_at(vars("RX_Node","TX_Node"), ~ as.character(.)) %>% 
+      mutate(RX_Position = RX_Node, 
+             TX_Position = TX_Node) %>% #make new variables for positions
+      
+      mutate_at(vars("RX_Position","TX_Position"), ~ case_when( . == "1" ~ paste("C"), # add position to all tags
+                                                       . == "2" ~ paste("S"),
+                                                       . == "3" ~ paste("W"),
+                                                       . == "4" ~ paste("E"),
+                                                       . == "5" ~ paste("N"),
                                                       TRUE ~ . #keep any original values that were not changed
                                                       )
               ) %>%
        mutate_at( vars("RX_Node", "TX_Node"), ~ ifelse(tag=="dulog", paste("d", ., sep=""), paste("p", ., sep=""))) #add tag brand to each tag id 
       
+#delete
+# Tag_Data <- Tag_Data %>%
+#       mutate_at(vars("RX_Node","TX_Node"), ~ as.character(.)) %>%
+#       mutate_at(vars("RX_Node","TX_Node"), ~ case_when( . == "1" ~ paste("C", ., sep = ""), # add position to all tags
+#                                                        . == "2" ~ paste("S", ., sep = ""),
+#                                                        . == "3" ~ paste("W", ., sep = ""),
+#                                                        . == "4" ~ paste("E", ., sep = ""),
+#                                                        . == "5" ~ paste("N", ., sep = ""),
+#                                                       TRUE ~ . #keep any original values that were not changed
+#                                                       )
+#               ) %>%
+#        mutate_at( vars("RX_Node", "TX_Node"), ~ ifelse(tag=="dulog", paste("d", ., sep=""), paste("p", ., sep=""))) #add tag brand to each tag id 
+
+
 
 #make combined receiver/ sender column "RX_TX", and a directionless dyad column "dyad"
 Tag_Data <- Tag_Data %>%
       mutate( RX_TX = paste(RX_Node, TX_Node, sep = "_")) %>% #receiver/ sender
-      mutate(Dyad = ifelse(RX_Node < TX_Node, RX_TX, paste(TX_Node, RX_Node, sep = "_"))  ) # directionless dyad
-  
+      mutate(Dyad = ifelse(RX_Node < TX_Node, RX_TX, paste(TX_Node, RX_Node, sep = "_"))) %>% # directionless dyad
+      mutate(TX_RX_Positions = paste(RX_Position, TX_Position, sep = "_")) %>%
+      mutate(Dyad_positions = ifelse(RX_Position < TX_Position, TX_RX_Positions, paste(TX_Position, RX_Position, sep = "_"))) #directionless positions
+
+
 #same for test table
 test_table <- test_table %>%
       mutate( RX_TX = paste(RX_Node, TX_Node, sep = "_")) %>%
+      mutate(TX_RX_Positions = paste(RX_Position, TX_Position, sep = "_")) %>%
       mutate(Dyad = ifelse(RX_Node < TX_Node, RX_TX, paste(TX_Node, RX_Node, sep = "_"))  )
 
 
@@ -238,6 +281,10 @@ test_table <- test_table %>%
 test_table <- test_table %>%
       mutate( test_type = paste(test, type_parallel, sep = "_"))
 
+#show trial durations in test_table
+test_table <- test_table %>%
+      mutate(trial_duration = difftime(end_time,start_time, units = "secs"))%>%
+      mutate(trial_duration = as.numeric(trial_duration))
 
 
 # Add trial types to Tag_Data by time range
@@ -259,27 +306,30 @@ Date_Time >= as.POSIXct("2024-01-26 00:08:00", tz = "America/New_York") & Date_T
 
 Date_Time >= as.POSIXct("2024-01-26 00:15:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-26 00:20:00", tz = "America/New_York") ~ "1mgrid_5p_20s_750d_parallel",
 
-Date_Time >= as.POSIXct("2024-01-26 00:28:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-26 23:00:00", tz = "America/New_York") ~ "1mgrid_5p_2s_750d_2_parallel", 
+Date_Time >= as.POSIXct("2024-01-26 00:28:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-26 23:00:00", tz = "America/New_York") ~ "1mgrid_5p_20s_750d_2_parallel", 
 
-Date_Time >= as.POSIXct("2024-01-27 00:13:00", tz = "America/New_York") & Date_Time <=  as.POSIXct("2024-01-27 00:18:00", tz = "America/New_York") ~ "20cmcircle_10p_10s_750d_1_NA", 
+Date_Time >= as.POSIXct("2024-01-27 00:13:00", tz = "America/New_York") & Date_Time <=  as.POSIXct("2024-01-27 00:18:00", tz = "America/New_York") ~ "20cmcircle_10p_5s_750d_1_NA", 
 
-Date_Time >= as.POSIXct("2024-01-27 00:20:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-27 00:25:00", tz = "America/New_York") ~ "20cmcircle_5p_10s_750d_1_NA",
+Date_Time >= as.POSIXct("2024-01-27 00:20:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-27 00:25:00", tz = "America/New_York") ~ "20cmcircle_5p_5s_750d_1_NA",
 
-Date_Time >= as.POSIXct("2024-01-27 00:26:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-27 00:31:00", tz = "America/New_York") ~ "20cmcircle_10p_10s_750d_2_NA",
+Date_Time >= as.POSIXct("2024-01-27 00:26:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-27 00:31:00", tz = "America/New_York") ~ "20cmcircle_10p_5s_750d_2_NA",
 
-Date_Time >= as.POSIXct("2024-01-27 00:33:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-27 00:38:00", tz = "America/New_York") ~ "20cmcircle_5p_10s_750d_2_NA",
+Date_Time >= as.POSIXct("2024-01-27 00:33:00", tz = "America/New_York") & Date_Time <= as.POSIXct("2024-01-27 00:38:00", tz = "America/New_York") ~ "20cmcircle_5p_5s_750d_2_NA",
 
 .default = "group_no"
 ))
 
-
+# From here on out, the data should only include contacts recorded during tests
+#only include the meetings from known tests
+Tag_Data <- Tag_Data %>%
+      filter(test_type!= "group_no")
 ```
 
 ```{r}
 
 # join reference test-table with known distances and Tag_Data 
 
-# make dummy variables for joining test_table and Tag_Data
+# make dummy variables for joining test_table and Tag_Data (combine dyads by test)
 test_table <- test_table %>%
       mutate( Dyad_test_type = paste(Dyad, test_type, sep = "_"))
 
@@ -287,17 +337,26 @@ Tag_Data <- Tag_Data %>%
       mutate( Dyad_test_type = paste(Dyad, test_type, sep = "_"))
 
 #add the test_table values to the data
-Tag_Data$distance_cm <- test_table$distance_cm[match(Tag_Data$Dyad_test_type, test_table$Dyad_test_type)]
+# Tag_Data$distance_cm <- test_table$distance_cm[match(Tag_Data$Dyad_test_type, test_table$Dyad_test_type)]
 
-#separate test_type, copy column 
+#use inner-join to drop all group_nos
+#join by Dyad_test_type 
+#would like to keep distance_cm, download_rate, sample_rate, N_tags
+
+
+Tag_Data <- test_table %>%
+      select(Dyad_test_type, distance_cm, download_rate, sample_rate, N_tags, trial_duration) %>%
+      right_join(Tag_Data, by = "Dyad_test_type")
+
+#separate test_type, copy column not necessary
 Tag_Data <- Tag_Data %>%
       mutate(test_type1 = test_type)  %>%
-     separate(test_type1, c('test', 'type_parallel'))
+     separate(test_type1, c("test", NA))
 
 
 #also, make tags ordered factors 
 Tag_Data <- Tag_Data %>% 
-      mutate_at(vars(RX_Node, TX_Node), ~  factor(., ordered = TRUE)) 
+      mutate_at(vars(RX_Node, TX_Node, Dyad), ~  factor(., ordered = TRUE)) 
 
 #make date time posixct
 Tag_Data$Date_Time <-  as.POSIXct(Tag_Data$Date_Time, tz= "ETC")
@@ -329,40 +388,219 @@ Tag_Data %>%
 All tags recorded meetings on the expected time ranges
 
 
-
-From here on out, the data should only include contacts recorded during tests
 ```{r, echo = FALSE}
 
-
-#only include the tags from known tests
-Tag_Data <- Tag_Data %>%
-      filter(test_type!= "group_no")
-
 #show the new max and min times for each tag
-Tag_Data %>% 
-      group_by(RX_Node) %>%
-      summarize(n=n(), max = max(Date_Time), min= min(Date_Time))
+# Tag_Data %>% 
+#       group_by(RX_Node) %>%
+#       summarize(n=n(), max = max(Date_Time), min= min(Date_Time))
 
 ```
 
 
-Total number of reads transmitted and received by each individual tag
-
---> Get rid of weird values, order test_type
-```{r, echo = FALSE, include = FALSE}
+```{r}
+#rename trial names  intuitively
 
 unique(Tag_Data$test_type)
-
-# only data from real tags (presumably Dyads with more than 10 readings)
 Tag_Data <- Tag_Data %>%
-      group_by(Dyad) %>% #get rid of weird made-up tag values
-      filter(n() > 10) %>% #get rid of weird made-up tag values (fewer than 10 observations)
-       mutate( test_type_tag = paste(test_type, tag, sep = "_")) %>%
-      ungroup() %>% #now order test type
-       mutate(test_type_tag= fct_relevel(test_type_tag,  c( "ten_parallel_proxlog", "ten_moved_dulog", "ten_moved_proxlog", "fifty_parallel_dulog", "fifty_parallel_proxlog", "fifty_moved_dulog", "fifty_moved_proxlog", "hundred_parallel_dulog", "hundred_parallel_proxlog", "hundred_moved_dulog", "hundred_moved_proxlog", "twohundred_parallel_dulog", "twohundred_parallel_proxlog", "threehundred_parallel_dulog","threehundred_parallel_proxlog", "fourhundred_parallel_dulog", "fourhundred_parallel_proxlog", "fivehundred_parallel_dulog", "fivehundred_parallel_proxlog", "sixhundred_parallel_dulog"  )))
-      
+      #mutate(trial = test_type) %>%
+      mutate(trial = case_match(test_type,
+                               "1mgrid_5p_2s_750d_parallel"~  "baseline" , 
+                                "1mgrid_5p_2s_15d_parallel" ~ "frequent_download" , 
+                               "1mgrid_5p_10s_750d_parallel" ~  "lower_sampling_10",
+                                "1mgrid_5p_20s_750d_parallel" ~ "lower_sampling_20",
+                                "1mgrid_5p_20s_750d_2_parallel" ~"battery_life" , 
+                               "20cmcircle_10p_5s_750d_1_NA" ~ "tag_number_10_1",
+                               "20cmcircle_10p_5s_750d_2_NA" ~ "tag_number_10_2",
+                               "20cmcircle_5p_5s_750d_2_NA" ~ "tag_number_5_2",
+                               "20cmcircle_5p_5s_750d_1_NA" ~ "tag_number_5_1"
+                                 )
+             )
+
+
 ```
 
+
+###  Does downloading more often cause more data loss? How is data loss when we only download after 750 meetings? 
+
+Does downloading more often cause more data loss? (downloading to base station every time 15 reads are logged, vs every time 750 reads are logged) 
+
+       Compare baseline and high download rate to see if high download rate results in higher rates of data loss
+- % lost in 5 minutes  (over whole test) ( per tag, per dyad)
+- % lost every minute? 
+
+
+
+```{r}
+#PUll data where only difference is download frequency (tried to download to base station every time a tag logs 750 meetings, or every time tag logs 15 meetings)
+# 5 minute long trial
+
+#variables = download_test (actually, pull out, above), groups compared
+
+
+download_test <- Tag_Data %>%
+      filter(trial =="baseline" |trial == "frequent_download")
+
+
+#accuracy by dyad
+ accuracy_by_download_dyad <- 
+      download_test %>% 
+      group_by(trial, Dyad) %>% #Dyad
+      summarize(n=n(), trial_duration = max(trial_duration), sample_rate = max(sample_rate), N_tags= max(N_tags) ) %>%
+      mutate(expected = (trial_duration/sample_rate*2)) %>% #(*2 bc each dyad should have detected eachother)
+      mutate(pct_detected = n/expected*100, pct_missing = 100-(n/expected*100))
+ accuracy_by_download_dyad
+
+sum_download_accuracy_dyad <-
+      accuracy_by_download_dyad %>%
+      group_by(trial) %>%
+      summarize(mean_pct_detected = mean(pct_detected), sd= sd(pct_detected), mean_pct_missing = mean(pct_missing))
+sum_download_accuracy_dyad
+
+      ggplot(data = accuracy_by_download_dyad, aes( x = trial, y = pct_detected, color = Dyad )) +
+      geom_point() +
+      geom_point(data = sum_download_accuracy_dyad, aes(x=trial, y=mean_pct_detected), color = "red" )+
+      ylab("% of meetings detected") +
+      xlab("Trial")     
+
+      
+#accuracy score by transmitting tag
+accuracy_by_download_tag <- 
+      download_test %>% 
+      group_by(trial, TX_Node) %>% #Dyad or TX_Node
+      summarize(n=n(), trial_duration = max(trial_duration), sample_rate = max(sample_rate), N_tags= max(N_tags) ) %>%
+      mutate(expected = (trial_duration/sample_rate*(N_tags-1))) %>%
+      mutate(pct_detected = n/expected*100, pct_missing = 100-(n/expected*100))
+ accuracy_by_download_tag
+
+sum_download_accuracy_tag <-
+      accuracy_by_download_tag %>%
+      group_by(trial) %>%
+      summarize(mean_pct_detected = mean(pct_detected), sd= sd(pct_detected), mean_pct_missing = mean(pct_missing))
+sum_download_accuracy_tag
+
+      ggplot(data = accuracy_by_download_tag, aes( x = trial, y = pct_detected, color = TX_Node )) +
+      geom_point() +
+      geom_point(data = sum_download_accuracy_tag, aes(x=trial, y=mean_pct_detected), color = "red" )+
+      ylab("% of meetings transmitted") +
+      xlab("Trial")
+ 
+      
+
+      
+      #frequent downloads result in more data-loss. 
+      # Some Dyads are consistently undersampled. 
+      
+#make accuracy score for dyads
+      #fix accuracy scores for circle tests
+#make dyad and tag level accuracy scores for each comparison that is interesting
+#can later compare pct_detected across trials to see if particular RX or TX are consistently bad
+
+```
+#make fn 
+```{r}
+#PUll data where only difference is download frequency (tried to download to base station every time a tag logs 750 meetings, or every time tag logs 15 meetings)
+# 5 minute long trial
+
+#variables = download_test (actually, pull out, above), groups compared
+
+
+comparison <- Tag_Data %>%
+      filter(trial =="baseline" |trial == "frequent_download")
+
+accuracy_test <- function(comparison, Title = "Data loss by treatment" ){
+      
+#accuracy by dyad
+ accuracy_by_dyad <- 
+      comparison %>% 
+      group_by(trial, Dyad) %>% #Dyad
+      summarize(n=n(), trial_duration = max(trial_duration), sample_rate = max(sample_rate), N_tags= max(N_tags) ) %>%
+      mutate(expected = (trial_duration/sample_rate*2)) %>% #(*2 bc each dyad should have detected eachother)
+      mutate(pct_detected = n/expected*100, pct_missing = 100-(n/expected*100))
+ accuracy_by_dyad
+
+sum_accuracy_dyad <-
+      accuracy_by_dyad %>%
+      group_by(trial) %>%
+      summarize(mean_pct_detected = mean(pct_detected), sd= sd(pct_detected), mean_pct_missing = mean(pct_missing))
+sum_accuracy_dyad
+
+   dyad_accuracy_plot <-
+         ggplot(data = accuracy_by_dyad, aes( x = trial, y = pct_detected, color = Dyad )) +
+      geom_point() +
+      geom_point(data = sum_accuracy_dyad, aes(x=trial, y=mean_pct_detected), shape = 3, color = "red" )+
+      ylab("% of Dyad meetings detected") +
+      xlab("Trial") +
+      ggtitle(Title)
+
+      
+#accuracy score by transmitting tag
+accuracy_by_tag <- 
+      comparison %>% 
+      group_by(trial, TX_Node) %>% #Dyad or TX_Node
+      summarize(n=n(), trial_duration = max(trial_duration), sample_rate = max(sample_rate), N_tags= max(N_tags) ) %>%
+      mutate(expected = (trial_duration/sample_rate*(N_tags-1))) %>%
+      mutate(pct_detected = n/expected*100, pct_missing = 100-(n/expected*100))
+ accuracy_by_tag
+
+sum_accuracy_tag <-
+      accuracy_by_tag %>%
+      group_by(trial) %>%
+      summarize(mean_pct_detected = mean(pct_detected), sd= sd(pct_detected), mean_pct_missing = mean(pct_missing))
+sum_accuracy_tag
+
+      tag_accuracy_plot <-
+            ggplot(data = accuracy_by_tag, aes( x = trial, y = pct_detected, color = TX_Node )) +
+      geom_point() +
+      geom_point(data = sum_accuracy_tag, aes(x=trial, y=mean_pct_detected), shape = 3, color = "red" )+
+      ylab("% of meetings detected") +
+      xlab("Trial") +
+      ggtitle(Title)
+ 
+p <-       list(sum_accuracy_dyad, dyad_accuracy_plot, sum_accuracy_tag, tag_accuracy_plot)
+p
+}
+
+#comparing download rate
+comparison <- Tag_Data %>%
+      filter(trial =="baseline" |trial == "frequent_download")
+accuracy_test(comparison, Title = "Download Rate Comparison")
+
+#comparing sampling rate
+comparison <- Tag_Data %>%
+      filter(trial =="baseline" |trial == "lower_sampling_10" |trial == "lower_sampling_20")
+accuracy_test(comparison, Title = "Effect of sampling rate on data loss")
+
+#comparison tag number 
+comparison <- Tag_Data %>%
+      filter(trial =="tag_number_10_1" |trial == "tag_number_10_2" |trial == "tag_number_5_1" | trial == "tag_number_5_2")
+accuracy_test(comparison, Title = "Effect of tag number on data loss") #other tags were hibernating
+
+
+      #frequent downloads result in more data-loss. 
+      # Some Dyads are consistently undersampled. 
+      
+#make accuracy score for dyads
+      #fix accuracy scores for circle tests
+#make dyad and tag level accuracy scores for each comparison that is interesting
+#can later compare pct_detected across trials to see if particular RX or TX are consistently bad
+
+```
+## troubleshooting cicle test, unclear (maybe data downloaded multiple times? Make code for getting rid of duplicates)
+## what is the transmission rate? 
+```{r}
+# were tags transmitting every second? 
+temp
+Tag_Data %>% 
+     filter(Date_Time > as.POSIXct('2024-01-27 00:13:00', tz= "ETC")) %>%
+      filter(Date_Time < as.POSIXct('2024-01-27 00:13:20', tz= "ETC")) %>%
+     filter(RX_Node == "p1") %>%
+      # filter(Dyad == "p2_p3") %>%
+      ggplot(aes(x=Date_Time, y=sample_rate)) +
+      #geom_jitter() +
+      geom_point
+
+```
 
 ### Reads transmitted from all meetings, by trial type
 ```{r, echo = FALSE, fig.height = 8}
@@ -380,13 +618,28 @@ Tag_Data <- Tag_Data %>%
 # max = max(Date_Time), min= min(Date_Time)
 
 
-Tag_Data %>% 
+data_loss <- Tag_Data %>% 
       group_by(test_type, RX_Node) %>%
       summarize(n=n(), min_t = min(Date_Time), max_t = max(Date_Time)) %>%
       mutate(test_s = max_t-min_t) %>%
       group_by(test_type) %>%
       summarize(mean = mean(n), sd=sd(n), test_s = max(test_s)) #round to nearest 100? #
 #average number of meetings per dyad / test = #s in test/ rate
+expected <- 
+      c((5-1)*(5*60)/10,
+(5-1)*(5*60)/20,
+(5-1)*(5*60)/2,
+(5-1)*(5*60)/2,
+(5-1)*(5*60)/20,
+(10-1)*(5*60)/10,
+(10-1)*(5*60)/10,
+(5-1)*(5*60)/10,
+(5-1)*(5*60)/10)
+
+data_loss <- cbind(data_loss, expected)
+
+cbind(
+
 
 #count min and max time 
 expected = # tags-1 *#s /tag rate 
@@ -396,6 +649,10 @@ expected = # tags-1 *#s /tag rate
  ggplot( aes(x= TX_Node)) +
       geom_bar() + 
       facet_wrap(~test_type, scales="free", ncol = 2)
+#  
+#  help Gerry figure out when to schedule. 
+# schedule meeting to decide on proxlogs 
+
 ```
 
 ### Reads transmitted from all meetings, by trial type
@@ -413,6 +670,14 @@ for (var in unique(Tag_Data$test_type)) {
                   ggtitle(var))
 }
 
+
+# make lines for how much there should be. 
+# make a % missing from each tag
+# do the same thing per dyad? 
+# any settings that make them less likely to miss data? 
+# seperate out y 5 minutes or 2 minutes? 
+# break down by 5 minute intervals
+      
 ```
 
 ### Mean and variance in number of contacts per tag type
