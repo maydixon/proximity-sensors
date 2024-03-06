@@ -4,6 +4,11 @@ output:
   pdf_document: default
   html_notebook: default
 ---
+# add sample rate
+#add test_duration
+# add N_tags (5 for all)
+
+
 
 
 We ran a test to compare the performance of dulog and proxlog tags under standardized conditions. In each test, we placed 5 tags on a grid with "North", "South", "East", "West", and "Center" as their positions. In the first test "ten-parallel", each tag on a cardinal direction was 10cm from the central tag, with all the tags facing in roughly the same orientation ("parallel"), and kept for about 10 minutes. Later tests (50, 100, 200, 300...600) the tags were moved 50 cm from the center, and so on. For the 10-100 distances, we also ran tests where we rotated the tags so that they faced in haphazard directions ("moved" tests). For each test, we estiamted the distance of each tag from all the other tags. We also discuss other ways that the tags compare. 
@@ -97,7 +102,7 @@ str(test_table)
 
 #Force into same timezone
 test_table$start_time <-  force_tz(test_table$start_time, tzone = "America/New_York")
-
+test_table$end_time <-  force_tz(test_table$end_time, tzone = "America/New_York")
 
 # correct data and time for PR_DATA
 
@@ -156,7 +161,16 @@ test_table <- test_table %>%
 test_table <- test_table %>%
       mutate( test_type = paste(test, type_parallel, sep = "_"))
 
+#make a trial duration column to test_table by start and end time 
+#show trial durations in test_table
+test_table <- test_table %>%
+      mutate(trial_duration = difftime(end_time,start_time, units = "secs"))%>%
+      mutate(trial_duration = as.numeric(trial_duration))
 
+# Add sample rate number of tags during test and test_duration to test_table
+test_table <- test_table %>%
+      mutate(sample_rate = 2) %>%
+      mutate(N_tags =5)
 
 # Add trial types to Tag_Data by time range
 
@@ -204,7 +218,12 @@ Tag_Data <- Tag_Data %>%
       mutate( Dyad_test_type = paste(Dyad, test_type, sep = "_"))
 
 #add the test_table values to the data
-Tag_Data$distance_cm <- test_table$distance_cm[match(Tag_Data$Dyad_test_type, test_table$Dyad_test_type)]
+# Tag_Data$distance_cm <- test_table$distance_cm[match(Tag_Data$Dyad_test_type, test_table$Dyad_test_type)]
+
+
+Tag_Data <- test_table %>%
+      select(Dyad_test_type, distance_cm, sample_rate, N_tags, trial_duration) %>%
+      right_join(Tag_Data, by = "Dyad_test_type")
 
 #separate test_type, copy column 
 Tag_Data <- Tag_Data %>%
@@ -215,6 +234,12 @@ Tag_Data <- Tag_Data %>%
 #also, make tags ordered factors 
 Tag_Data <- Tag_Data %>% 
       mutate_at(vars(RX_Node, TX_Node), ~  factor(., ordered = TRUE)) 
+
+
+# Add sample rate number of tags during test and test_duration to test_table
+test_table <- test_table %>%
+      mutate(sample_rate== 2) %>%
+      mutate(N_tags ==5)
 
 ```
 
@@ -239,7 +264,8 @@ While Dulog did download data from a previous day, which is normal, it also made
 
 Its also strange that only 2 of the dulogs recorded in the evening, when I downloaded the data, as they were all on and right next to each other. 
 
-Meetings recorded by transmitting tags by time:
+### Meetings recorded by transmitting tags by time
+
 ```{r, echo = FALSE}
 Tag_Data %>% 
      filter(Date_Time > as.POSIXct('2023-11-10 00:00:01', tz= "ETC")) %>%
@@ -272,6 +298,36 @@ Tag_Data %>% group_by(tag) %>% summarize(n=n(), max = max(Date_Time), min= min(D
 
 ```
 This shows that the tags didn't download anything after 2pm. Probably bc nothing after the hour downloaded (though we gave them an opportunity to later, but possibly bc these were mostly the 5 and 6m from center tests, where few contacts were recorded)
+
+###
+
+```{r}
+#Show just the tags read by one tag for known period of time
+
+#checking sample rate for proxlog 
+Tag_Data %>% 
+     filter(Date_Time > as.POSIXct('2023-11-10 16:44:00', tz= "America/New_York")) %>%
+      filter(Date_Time < as.POSIXct('2023-11-10 16:45:00', tz= "America/New_York")) %>%
+     filter(RX_TX == "pW2_pN1") %>%
+      #filter(RX_Node == "pW2") %>%
+      ggplot(aes(x=Date_Time, y=tag)) +
+       geom_point()
+#looks like was transmitting every 2 seconds 
+
+#checking sample rate for dulog
+Tag_Data %>% 
+     filter(Date_Time > as.POSIXct('2023-11-10 12:30:00', tz= "America/New_York")) %>%
+      filter(Date_Time < as.POSIXct('2023-11-10 12:31:00', tz= "America/New_York")) %>%
+     filter(RX_TX == "dE73_dN69") %>%
+      #filter(RX_Node == "pW2") %>%
+      ggplot(aes(x=Date_Time, y=tag)) +
+       geom_point() #+
+
+#both 2 seconds sample rate, but proxlog is patchier
+
+```
+
+
 
 
 Total number of reads transmitted and received by each individual tag
@@ -339,7 +395,7 @@ At known ranges, dulog had much more even receiving read rates than proxlogs, wh
 Neither of the tags did a great job at transmitting even # of meetings when the tags were all well within range (one of the dulog tags transmitted a bunch more than the others, the proxlogs are all over the map)
 
 --> Get rid of weird values, order test_type
-```{r, echo = FALSE}
+```{r, echo = FALSE, include = FALSE}
 # only data from real tags (presumably Dyads with more than 10 readings)
 
 Tag_Data <- Tag_Data %>%
@@ -352,20 +408,27 @@ Tag_Data <- Tag_Data %>%
 ```
 
 
-Reads from all meetings, by trial type:
-```{r, echo = FALSE}
+### Reads transmitted from all meetings, by trial type
+```{r, echo = FALSE, fig.height = 8}
 #number of meetings faceted by test_type
 
  Tag_Data %>%
  ggplot( aes(x= TX_Node)) +
       geom_bar() + 
       facet_wrap(~test_type_tag, scales="free_x", ncol = 2)
+```
+
+### Reads transmitted from all meetings, by trial type
+```{r, echo = FALSE, fig.height = 8}
 
  Tag_Data %>%
  ggplot( aes(x= RX_Node)) +
       geom_bar() + 
       facet_wrap(~test_type_tag, scales="free_x", ncol = 2) 
-     
+```
+
+### Mean and variance in number of contacts per tag type
+```{r, echo = FALSE}
 # for each test/tag type, summarize the mean # of contacts/tagID and the variance. 
 Tag_read_variance <- 
       Tag_Data %>%
@@ -389,6 +452,7 @@ Tag_read_variance
        mutate(test_type = fct_relevel(test_type, c("ten_parallel", "ten_moved", "fifty_parallel", "fifty_moved", "hundred_parallel", "hundred_moved", "twohundred_parallal", "threehundred_parallel", "fourhundred_parallel"))) %>%
        ggplot(aes(x= test_type, y= sd, fill=tag)) +
        geom_bar(stat = "identity", position = "dodge") +
+       theme(axis.text.x = element_text(angle = 45)) +
        ggtitle("standard deviation in # of reads between different tags in a trial")
 
 ```
@@ -397,7 +461,7 @@ The two tags have similar ranges. But the dulogs detected tags up to at least 4m
 Dulog reads more evenly than proxlog
 
 
-Signal Strength (RSSI) by Distance
+### Signal Strength (RSSI) by Distance
 ```{r, echo = FALSE}
 Tag_Data$RSSI <- as.numeric(Tag_Data$RSSI)
 
@@ -405,7 +469,7 @@ Tag_Data$RSSI <- as.numeric(Tag_Data$RSSI)
 # by tag
 ggplot(data= Tag_Data, aes(y=as.numeric(RSSI), x= distance_cm, color= as.factor(tag))) +
       geom_point(position = "jitter") 
-
+#ggsave("RSSI_distance_comparison.jpg")
 # by tag with trendline
 ggplot(data= Tag_Data, aes(y=RSSI, x= distance_cm, color= as.factor(tag))) +
       #geom_point(position = "jitter") +
@@ -445,14 +509,16 @@ Tag_Data %>%
       mutate(dist_test = paste(distance_cm, test_type, sep = "_")) %>%
 ggplot(aes(y=RSSI, x= as.factor(distance_cm), color= tag)) +
       geom_violin()
-      
+
+# ggsave("RSSI_variance_comparison.jpg")
+
 
 str(Tag_Data)
 ```
 Proxlog and Dulog use different signals, so they have different signal strengths at the same distances. 
 Proxlog declines logarithmically, is especially steep at low distances. Dulog initially declines very precipitously and later declines  linearly. 
 
-Differences in signal strength variance by group:
+### Differences in signal strength variance by group
 ```{r, echo = FALSE}
 sd_tags <- Tag_Data %>%
       filter(distance_cm < 600 ) %>%
@@ -491,7 +557,7 @@ There is no obvious difference in the variation in signal strength between the t
 At small distances, both tags have about the same variance, and at larger distances, dulogs seem to have higher variances in signal strength 
 
 
-Sensitivity to tag direction:
+### Sensitivity to tag direction
 ```{r, echo = FALSE}
 # by tag orientation
 Tag_Data %>%
@@ -540,4 +606,182 @@ The orientation of the tag does not seem to have a consistent effect for either 
 
 ##############
 
+```{r}
+accuracy_test <- function(comparison,  Title = "Data loss by treatment" ){
+   
+#accuracy by dyad
+ accuracy_by_dyad <- 
+      comparison %>% 
+      group_by(test_type_tag, Dyad) %>% #Dyad
+      summarize(n=n(), trial_duration = max(trial_duration), sample_rate = max(sample_rate), N_tags= max(N_tags) ) %>%
+      mutate(expected = (trial_duration/sample_rate*2)) %>% #(*2 bc each dyad should have detected eachother)
+      mutate(pct_detected = n/expected*100, pct_missing = 100-(n/expected*100))
+ accuracy_by_dyad
+
+sum_accuracy_dyad <-
+      accuracy_by_dyad %>%
+      group_by(test_type_tag) %>%
+      summarize(mean_pct_detected = mean(pct_detected), sd= sd(pct_detected), mean_pct_missing = mean(pct_missing))
+sum_accuracy_dyad
+
+   dyad_accuracy_plot <-
+         ggplot(data = accuracy_by_dyad, aes( x = test_type_tag, y = pct_detected, color = Dyad )) +
+      geom_point() +
+      geom_point(data = sum_accuracy_dyad, aes(x=test_type_tag, y=mean_pct_detected), shape = 3, color = "red" )+
+      ylim(0,100) +
+      theme(axis.text.x = element_text(angle = 45)) +
+      ylab("% of Dyad meetings detected") +
+      xlab("Trial") +
+      ggtitle(Title)
+
+      
+#accuracy score by transmitting tag
+accuracy_by_tag <- 
+      comparison %>% 
+      group_by(test_type_tag, TX_Node) %>% #Dyad or TX_Node
+      summarize(n=n(), trial_duration = max(trial_duration), sample_rate = max(sample_rate), N_tags= max(N_tags) ) %>%
+      mutate(expected = (trial_duration/sample_rate*(N_tags-1))) %>%
+      mutate(pct_detected = n/expected*100, pct_missing = 100-(n/expected*100))
+ accuracy_by_tag
+
+sum_accuracy_tag <-
+      accuracy_by_tag %>%
+      group_by(test_type_tag) %>%
+      summarize(mean_pct_detected = mean(pct_detected), sd= sd(pct_detected), mean_pct_missing = mean(pct_missing))
+sum_accuracy_tag
+
+      tag_accuracy_plot <-
+            ggplot(data = accuracy_by_tag, aes( x = test_type_tag, y = pct_detected, color = TX_Node )) +
+      geom_point() +
+      geom_point(data = sum_accuracy_tag, aes(x=test_type_tag, y=mean_pct_detected), shape = 3, color = "red" )+
+       ylim(0,100) +
+       theme(axis.text.x = element_text(angle = 45)) +
+      ylab("% of meetings detected") +
+      xlab("Trial") +
+      ggtitle(Title)
+ 
+p <-       list(accuracy_by_dyad, sum_accuracy_dyad, dyad_accuracy_plot, sum_accuracy_tag, tag_accuracy_plot)
+p
+}
+```
+
+```{r dulog accuracy rates}
+#comparing all  accuracy rates for dulog
+dulog_summary <- 
+      Tag_Data %>%
+      filter(tag=="dulog") %>%
+accuracy_test(., Title = "All trials")
+dulog_summary
+
+dulog_summary[[3]]
+#ggsave("meetings_detected_dyad_dulog.jpg")
+dulog_summary[[5]]
+#ggsave("meetings_detected_tag_dulog.jpg")
+dulog_summary[[2]]
+#write.csv(dulog_summary[[2]], "dulog_accuracy_by_test.csv")
+```
+time function 
+```{r}
+time_fn <- function(data = data, Trial= Trial, Trial_type = "baseline", group = group, breaks = 15, expected = 20) {
+   
+ 
+
+
+            data %>%
+            filter({{Trial}} == Trial_type) %>%
+            arrange(Date_Time) %>% 
+            mutate( time_ints = cut(Date_Time, breaks = breaks)) %>%
+             group_by(time_ints, {{group}}) %>% 
+            summarise(n=n()) %>%
+            ggplot(aes(x=time_ints, y= n, group = {{group}}, color = {{group}})) +
+            geom_point() +
+            geom_line()+
+            geom_hline(yintercept= expected, linetype="dashed", #add "expected
+                color = "red") +
+            theme(axis.text.x = element_text(angle = 45))  +
+            ylab("n meetings recorded") +
+            xlab("time step") +
+            ggtitle("Do different nodes consistently record different amounts of contacts?")
+      
+      
+}
+
+class(Tag_Data$Date_Time)
+class(Tag_Data_Jan26$Date_Time)
+
+
+```
+
+
+performance of dyads over the course of tests
+```{r}
+
+Tag_Data %>%
+      filter(tag=="dulog") %>%
+time_fn(data= ., Trial = test_type, Trial_type = "fifty_parallel", breaks = "min", group= Dyad, expected = 60)
+#ggsave("dulog_differences in meetings between dyads over time.jpg")
+
+Tag_Data %>%
+      filter(tag=="dulog") %>%
+time_fn(data= ., Trial = test_type, Trial_type = "fifty_parallel", breaks = "min", group= TX_Node, expected = 60)
+#ggsave("dulog_differences in meetings between tags over time.jpg")
+
+
+Tag_Data %>%
+      filter(tag=="proxlog") %>%
+time_fn(data= ., Trial = test_type, Trial_type = "fifty_parallel", breaks = "min", group= Dyad, expected = 60)
+#ggsave("proxlog_differences in meetings between dyads over time.jpg")
+
+Tag_Data %>%
+      filter(tag=="proxlog") %>%
+time_fn(data= ., Trial = test_type, Trial_type = "fifty_parallel", breaks = "min", group= TX_Node, expected = 60)
+#ggsave("proxlog_differences in meetings between tags over time.jpg")
+```
+
+
+
+# comparing all accuracy rates for proxlogs
+
+```{r proxlog accuracy rates}
+#comparing all  accuracy rates for proxlog, given that this test was done with very high download rates
+proxlog_summary <- 
+      Tag_Data %>%
+      filter(tag=="proxlog") %>%
+accuracy_test(., Title = "All trials")
+proxlog_summary
+
+
+proxlog_summary[[3]]
+#ggsave("meetings_detected_dyad_proxlog.jpg")
+proxlog_summary[[5]]
+#ggsave("meetings_detected_tag_proxlog.jpg")
+proxlog_summary[[2]]
+#write.csv(proxlog_summary[[2]], "proxlog_accuracy_by_test.csv")
+
+```
+```{r}
+#Does dyad matter? 
+
+library(lme4)
+#dulog_summary[[1]] 
+# % detected 
+
+
+glm(pct_detected ~ Dyad + test_type_tag, data = dulog_summary[[1]])
+glm(pct_detected ~  test_type_tag, data = dulog_summary[[1]])
+
+
+
+```
+
+#write combined dataset
+```{r}
+#write.csv(Tag_Data, "Nov5_logger_testing.csv")
+# write.csv(obs, "S-differences between species.csv")
+Tag_Data_Nov10 <-
+      Tag_Data %>%
+      select(!Dyad_test_type) %>% #drop dyad dummy variable 
+      relocate(Dyad, Date_Time, RSSI, test_type)
+#write.csv(Tag_Data, "Jan26_logger_testing.csv")
+```
 
