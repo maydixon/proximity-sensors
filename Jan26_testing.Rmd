@@ -116,9 +116,12 @@ Tag number test (test 10 vs 5 tags to see if there is more data loss with 10 )
 
 
 ```{r, include = FALSE}
-library(tidyverse)
+
 library(readr)
 library(lubridate)
+library(tibbletime)
+library(tidyverse)
+#library(cut.POSIXt)
 ```
 
 --> Data wrangling: import data
@@ -212,6 +215,11 @@ head(PR_DATA)
 
 Tag_Data <- PR_DATA
 
+#remove duplicate rows
+Tag_Data <-Tag_Data %>%
+  distinct(.keep_all = TRUE)
+
+
 #rename tagA to RX_Node, and rename cardinal positions
 # Make tag names indicate tag type (d or p), then unique ID e.g. "69"
 test_table <- test_table %>%
@@ -247,18 +255,7 @@ Tag_Data <- Tag_Data %>%
               ) %>%
        mutate_at( vars("RX_Node", "TX_Node"), ~ ifelse(tag=="dulog", paste("d", ., sep=""), paste("p", ., sep=""))) #add tag brand to each tag id 
       
-#delete
-# Tag_Data <- Tag_Data %>%
-#       mutate_at(vars("RX_Node","TX_Node"), ~ as.character(.)) %>%
-#       mutate_at(vars("RX_Node","TX_Node"), ~ case_when( . == "1" ~ paste("C", ., sep = ""), # add position to all tags
-#                                                        . == "2" ~ paste("S", ., sep = ""),
-#                                                        . == "3" ~ paste("W", ., sep = ""),
-#                                                        . == "4" ~ paste("E", ., sep = ""),
-#                                                        . == "5" ~ paste("N", ., sep = ""),
-#                                                       TRUE ~ . #keep any original values that were not changed
-#                                                       )
-#               ) %>%
-#        mutate_at( vars("RX_Node", "TX_Node"), ~ ifelse(tag=="dulog", paste("d", ., sep=""), paste("p", ., sep=""))) #add tag brand to each tag id 
+
 
 
 
@@ -267,14 +264,16 @@ Tag_Data <- Tag_Data %>%
       mutate( RX_TX = paste(RX_Node, TX_Node, sep = "_")) %>% #receiver/ sender
       mutate(Dyad = ifelse(RX_Node < TX_Node, RX_TX, paste(TX_Node, RX_Node, sep = "_"))) %>% # directionless dyad
       mutate(TX_RX_Positions = paste(RX_Position, TX_Position, sep = "_")) %>%
-      mutate(Dyad_positions = ifelse(RX_Position < TX_Position, TX_RX_Positions, paste(TX_Position, RX_Position, sep = "_"))) #directionless positions
+      mutate(Dyad_Positions = ifelse(RX_Position < TX_Position, TX_RX_Positions, paste(TX_Position, RX_Position, sep = "_"))) #directionless positions
 
 
 #same for test table
 test_table <- test_table %>%
       mutate( RX_TX = paste(RX_Node, TX_Node, sep = "_")) %>%
       mutate(TX_RX_Positions = paste(RX_Position, TX_Position, sep = "_")) %>%
-      mutate(Dyad = ifelse(RX_Node < TX_Node, RX_TX, paste(TX_Node, RX_Node, sep = "_"))  )
+      mutate(TX_RX_Positions = ifelse(TX_RX_Positions == "NA_NA", NA, TX_RX_Positions)) %>%
+      mutate(Dyad = ifelse(RX_Node < TX_Node, RX_TX, paste(TX_Node, RX_Node, sep = "_"))  ) 
+      
 
 
 #make separate dummy columns columns for test distance and tag orientation
@@ -323,6 +322,18 @@ Date_Time >= as.POSIXct("2024-01-27 00:33:00", tz = "America/New_York") & Date_T
 #only include the meetings from known tests
 Tag_Data <- Tag_Data %>%
       filter(test_type!= "group_no")
+
+## remove cardinal directions from directionless trials (the circle trials) 
+#case when test_type includes "circle", RX_Position, TX_position, TX_RX_positions, Dyad_Positions are all NA
+
+Tag_Data <- Tag_Data %>%
+mutate_at(vars("RX_Position","TX_Position", "TX_RX_Positions", "Dyad_Positions"),
+          ~ case_when(grepl("circle", test_type ) ~ paste(NA), # add position to all tags
+                       TRUE ~ . #keep any original values that were not changed
+                         )
+)
+             
+
 ```
 
 ```{r}
@@ -360,6 +371,11 @@ Tag_Data <- Tag_Data %>%
 
 #make date time posixct
 Tag_Data$Date_Time <-  as.POSIXct(Tag_Data$Date_Time, tz= "ETC")
+
+
+#remove duplicate rows
+Tag_Data <-Tag_Data %>%
+  distinct(.keep_all = TRUE)
 
 ```
 
@@ -444,7 +460,7 @@ download_test <- Tag_Data %>%
 
 #accuracy by dyad
  accuracy_by_download_dyad <- 
-      download_test %>% 
+      Tag_Data %>% 
       group_by(trial, Dyad) %>% #Dyad
       summarize(n=n(), trial_duration = max(trial_duration), sample_rate = max(sample_rate), N_tags= max(N_tags) ) %>%
       mutate(expected = (trial_duration/sample_rate*2)) %>% #(*2 bc each dyad should have detected eachother)
@@ -466,7 +482,7 @@ sum_download_accuracy_dyad
       
 #accuracy score by transmitting tag
 accuracy_by_download_tag <- 
-      download_test %>% 
+      Tag_Data %>% 
       group_by(trial, TX_Node) %>% #Dyad or TX_Node
       summarize(n=n(), trial_duration = max(trial_duration), sample_rate = max(sample_rate), N_tags= max(N_tags) ) %>%
       mutate(expected = (trial_duration/sample_rate*(N_tags-1))) %>%
@@ -485,17 +501,28 @@ sum_download_accuracy_tag
       ylab("% of meetings transmitted") +
       xlab("Trial")
  
-      
 
-      
-      #frequent downloads result in more data-loss. 
-      # Some Dyads are consistently undersampled. 
-      
-#make accuracy score for dyads
-      #fix accuracy scores for circle tests
-#make dyad and tag level accuracy scores for each comparison that is interesting
-#can later compare pct_detected across trials to see if particular RX or TX are consistently bad
+#are some dyads overall detected less? 
+#overall Dyad accuracy in the different tests
+  Dyad_accuracy <-  accuracy_by_download_dyad %>%
+            group_by(Dyad) %>%
+            summarize(mean_pct_detected = mean(pct_detected), sd= sd(pct_detected), mean_pct_missing = mean(pct_missing)) %>%
+            
+      ggplot( aes(x=Dyad, y=mean_pct_detected)) + 
+  geom_errorbar(aes(ymin=mean_pct_detected-sd, ymax=mean_pct_detected+sd), width=.3) +
+  geom_point(size=2)
+    Dyad_accuracy 
 
+    Tag_accuracy <-  accuracy_by_download_tag %>%
+            group_by(TX_Node) %>%
+            summarize(mean_pct_detected = mean(pct_detected), sd= sd(pct_detected), mean_pct_missing = mean(pct_missing)) %>%
+            
+      ggplot( aes(x=TX_Node, y=mean_pct_detected)) + 
+  geom_errorbar(aes(ymin=mean_pct_detected-sd, ymax=mean_pct_detected+sd), width=.3) +
+  geom_point(size=2)
+    Tag_accuracy 
+
+#could do a model looking at the effect of tag on accuracy 
 ```
 #make fn 
 ```{r}
@@ -508,7 +535,7 @@ sum_download_accuracy_tag
 comparison <- Tag_Data %>%
       filter(trial =="baseline" |trial == "frequent_download")
 
-accuracy_test <- function(comparison, Title = "Data loss by treatment" ){
+accuracy_test <- function(comparison = comparison, Title = "Data loss by treatment" ){
       
 #accuracy by dyad
  accuracy_by_dyad <- 
@@ -529,9 +556,11 @@ sum_accuracy_dyad
          ggplot(data = accuracy_by_dyad, aes( x = trial, y = pct_detected, color = Dyad )) +
       geom_point() +
       geom_point(data = sum_accuracy_dyad, aes(x=trial, y=mean_pct_detected), shape = 3, color = "red" )+
+      theme(axis.text.x = element_text(angle = 45))  +
+      ylim(0,100) +
       ylab("% of Dyad meetings detected") +
       xlab("Trial") +
-      ggtitle(Title)
+      ggtitle(paste(Title, "by dyad"))
 
       
 #accuracy score by transmitting tag
@@ -553,28 +582,152 @@ sum_accuracy_tag
             ggplot(data = accuracy_by_tag, aes( x = trial, y = pct_detected, color = TX_Node )) +
       geom_point() +
       geom_point(data = sum_accuracy_tag, aes(x=trial, y=mean_pct_detected), shape = 3, color = "red" )+
+       ylim(0,100) +
       ylab("% of meetings detected") +
+       theme(axis.text.x = element_text(angle = 45))  +
       xlab("Trial") +
-      ggtitle(Title)
+      ggtitle(paste(Title, "by tag"))
  
-p <-       list(sum_accuracy_dyad, dyad_accuracy_plot, sum_accuracy_tag, tag_accuracy_plot)
+p <-       list(accuracy_by_dyad, sum_accuracy_dyad, dyad_accuracy_plot, sum_accuracy_tag, tag_accuracy_plot)
 p
 }
+```
 
+
+
+Accuracy in baseline conditions
+
+```{r}
+baseline_accuracy <-  Tag_Data %>%
+      filter(trial =="baseline") %>%
+accuracy_test(., Title = "baseline accuracy")
+
+baseline_accuracy[[3]]
+#ggsave("Proxlog_baseline_accuracy_dyad.jpg")
+
+baseline_accuracy[[5]]
+#ggsave("Proxlog_baseline_accuracy_tag.jpg")
+
+baseline_accuracy
+```
+Predictability of # of dyadic meetings detected over course of 1 5 minute trial. 
+
+
+```{r}
+ Tag_Data %>%
+      filter(trial =="baseline")%>%
+      head()
+
+
+
+ #baseline trial ran for 300 seconds
+#had 2 second sample rate
+#expected dyad = duration /sample rate *2 (two tags sending and receiving)
+#expected transmitted per tag (TX_node)= duration s /sample rate *(n-1)
+#cut into bins of about 20 seconds (~15 breaks). Expected # of reads/dyad should be 20: 
+#expected reads per tag would be that *5 reads 
+#expected = 360
+
+
+# possible groups: Dyad, TX_Node, RX_Node
+
+time_fn <- function(data = data, Trial= Trial, Trial_type = "baseline", group = group, breaks = 15, expected = 20) {
+   
+ 
+
+
+            data %>%
+            filter({{Trial}} == Trial_type) %>%
+            arrange(Date_Time) %>% 
+            mutate( time_ints = cut(Date_Time, breaks = breaks)) %>%
+             group_by(time_ints, {{group}}) %>% 
+            summarise(n=n()) %>%
+            ggplot(aes(x=time_ints, y= n, group = {{group}}, color = {{group}})) +
+            geom_point() +
+            geom_line()+
+            geom_hline(yintercept= expected, linetype="dashed", #add "expected
+                color = "red") +
+            theme(axis.text.x = element_text(angle = 45))  +
+            ylab("n meetings recorded") +
+            xlab("time step") +
+            ggtitle("Do different nodes consistently record different amounts of contacts?")
+      
+      
+}
+
+
+   
+time_fn(data= Tag_Data, Trial = trial, Trial_type ="baseline", group= Dyad)
+#ggsave("differences in meetings between dyads.jpg")
+
+time_fn(data= Tag_Data, Trial = trial, Trial_type ="baseline", group= TX_Node, expected = 40)
+time_fn(data= Tag_Data, Trial = trial, Trial_type ="baseline", group= RX_Node, expected = 40)
+#ggsave("proxlog_differences in recorded by receiving tags.jpg")
+
+time_fn(data= Tag_Data, Trial = trial, Trial_type ="baseline", group= TX_Node, expected = 120, breaks = "mins")
+#ggsave("proxlog_differences in meetings between tags_min.jpg")
+
+time_fn(data= Tag_Data, Trial = trial, Trial_type ="baseline", group= Dyad, expected = 60, breaks = "mins")
+#ggsave("proxlog_differences in meetings between Dyads_min.jpg")
+
+  
+
+
+```
+
+
+
+```{r}
 #comparing download rate
-comparison <- Tag_Data %>%
-      filter(trial =="baseline" |trial == "frequent_download")
-accuracy_test(comparison, Title = "Download Rate Comparison")
+download_rate_comparison <- Tag_Data %>%
+      filter(trial =="baseline" |trial == "frequent_download") %>%
+accuracy_test(., Title = "Download Rate Comparison")
 
+download_rate_comparison[[3]]
+ggsave("Proxlog_Effect of download rate on data loss_dyad.jpg")
+```
+```{r}
+
+```
+
+
+
+```{r}
 #comparing sampling rate
-comparison <- Tag_Data %>%
-      filter(trial =="baseline" |trial == "lower_sampling_10" |trial == "lower_sampling_20")
-accuracy_test(comparison, Title = "Effect of sampling rate on data loss")
+ sample_rate_comparison <- Tag_Data %>%
+      filter(trial =="baseline" |trial == "lower_sampling_10" |trial == "lower_sampling_20") %>%
+      mutate(trial = case_match(trial,
+                 "baseline" ~ "2 s",
+                 "lower_sampling_10" ~ "10 s",
+                 "lower_sampling_20" ~ "20 s")) %>%
+      mutate(trial = fct_reorder(trial, sample_rate)) %>%
+      
+accuracy_test(., Title = "Effect of sampling rate on data loss")
+ sample_rate_comparison[[2]]
+ggsave("Proxlog_Effect of sampling rate on data loss.jpg")
+sample_rate_comparison
+
+
 
 #comparison tag number 
-comparison <- Tag_Data %>%
-      filter(trial =="tag_number_10_1" |trial == "tag_number_10_2" |trial == "tag_number_5_1" | trial == "tag_number_5_2")
-accuracy_test(comparison, Title = "Effect of tag number on data loss") #other tags were hibernating
+tag_number_comparison <- Tag_Data %>%
+      filter(trial =="tag_number_10_1" |trial == "tag_number_10_2" |trial == "tag_number_5_1" | trial == "tag_number_5_2") %>%
+       mutate(trial = case_match(trial,
+                 "tag_number_10_1" ~ "10 tags test 1",
+                 "tag_number_10_2" ~ "10 tags test 2",
+                 "tag_number_5_1" ~ "5 tags test 1",
+                 "tag_number_5_2" ~ "5 tags test 2")) %>%
+accuracy_test(., Title = "Effect of tag number on data loss") #other tags were hibernating
+ 
+
+tag_number_comparison[[3]]
+ggsave("Proxlog_Effect of tag number on data loss_dyad.jpg")
+tag_number_comparison[[5]]
+ggsave("Proxlog_Effect of tag number on data loss_tag.jpg")
+
+tag_number_comparison
+
+#ggsave("Proxlog_Effect of tag number on data loss.jpg")
 
 
       #frequent downloads result in more data-loss. 
@@ -585,130 +738,109 @@ accuracy_test(comparison, Title = "Effect of tag number on data loss") #other ta
 #make dyad and tag level accuracy scores for each comparison that is interesting
 #can later compare pct_detected across trials to see if particular RX or TX are consistently bad
 
+
 ```
-## troubleshooting cicle test, unclear (maybe data downloaded multiple times? Make code for getting rid of duplicates)
+##overall  of performance accross different Jan 26 tests
+```{r}
+ overall_comparison <- Tag_Data %>%
+      filter(trial != "tag_number_10_1" & #pull out less comparable tests
+                   trial != "tag_number_10_2" &
+                   trial != "tag_number_5_1" &
+                   trial != "tag_number_5_2") %>%
+      accuracy_test(., Title = "Comparison of tag performance between tests")
+ overall_comparison
+
+overall_comparison[[3]]
+#ggsave("overall comparison of performance in jan proxlog tests dyad.jpg")
+
+```
+Is Dyad a significant variable in predicting pct_detected?
+```{r}
+library(lme4)
+#dulog_summary[[1]] 
+# % detected 
+
+#simple anova seems to think dyad is a significant variable 
+summary(aov(pct_detected ~ Dyad, data = overall_comparison[[1]]))
+
+
+```
+
+
+## troubleshooting circle test, unclear (maybe data downloaded multiple times? Make code for getting rid of duplicates)
 ## what is the transmission rate? 
 ```{r}
-# were tags transmitting every second? 
-temp
-Tag_Data %>% 
-     filter(Date_Time > as.POSIXct('2024-01-27 00:13:00', tz= "ETC")) %>%
-      filter(Date_Time < as.POSIXct('2024-01-27 00:13:20', tz= "ETC")) %>%
-     filter(RX_Node == "p1") %>%
-      # filter(Dyad == "p2_p3") %>%
-      ggplot(aes(x=Date_Time, y=sample_rate)) +
+#what times did each tag transmit
+Tag_Data %>%
+      filter(trial =="tag_number_10_1" |trial == "tag_number_10_2" |trial == "tag_number_5_1" | trial == "tag_number_5_2") %>%
+    #  filter(trial== "tag_number_10_1") %>%
+      ggplot(aes(x=Date_Time, y=TX_Node, color = trial)) +
       #geom_jitter() +
-      geom_point
+      geom_point()
+
+
+# were tags transmitting every second? #looks like there is some duplicate data
+
+Tag_Data %>% 
+     filter(Date_Time > as.POSIXct('2024-01-27 00:30:00', tz= "ETC")) %>%
+      filter(Date_Time < as.POSIXct('2024-01-27 00:31:00', tz= "ETC")) %>%
+     #filter(RX_Node == "p2") %>%
+      filter(RX_TX == "p2_p3") %>%
+      ggplot(aes(x=Date_Time, y=trial)) +
+       geom_jitter(width=0, height=0.02) 
+
+      #geom_point()
+#RX_TX and time == duplicate
+#there were duplicates, they are gone now 
 
 ```
+## performance over time
 
-### Reads transmitted from all meetings, by trial type
-```{r, echo = FALSE, fig.height = 8}
-#number of meetings faceted by test_type
+This test was designed to see if performance would drop over time as battery levels decreased. 
+The Y is number of contacts logged over 30 minutes for each tag. X is time. If performance declined with battery levels, then you would expect a downward slope, especially at the end. 
+```{r}
 
-#expected number of meetings per tag
-# tags-1 *#s /tag rate 
- (5-1)*(5*60)/5
-
-#expected number of meetings per dyad per test
-(5*60)/5
-
-#average number of meetings per tag / test
-
-# max = max(Date_Time), min= min(Date_Time)
-
-
-data_loss <- Tag_Data %>% 
-      group_by(test_type, RX_Node) %>%
-      summarize(n=n(), min_t = min(Date_Time), max_t = max(Date_Time)) %>%
-      mutate(test_s = max_t-min_t) %>%
-      group_by(test_type) %>%
-      summarize(mean = mean(n), sd=sd(n), test_s = max(test_s)) #round to nearest 100? #
-#average number of meetings per dyad / test = #s in test/ rate
-expected <- 
-      c((5-1)*(5*60)/10,
-(5-1)*(5*60)/20,
-(5-1)*(5*60)/2,
-(5-1)*(5*60)/2,
-(5-1)*(5*60)/20,
-(10-1)*(5*60)/10,
-(10-1)*(5*60)/10,
-(5-1)*(5*60)/10,
-(5-1)*(5*60)/10)
-
-data_loss <- cbind(data_loss, expected)
-
-cbind(
-
-
-#count min and max time 
-expected = # tags-1 *#s /tag rate 
-
-
- Tag_Data %>%
- ggplot( aes(x= TX_Node)) +
-      geom_bar() + 
-      facet_wrap(~test_type, scales="free", ncol = 2)
-#  
-#  help Gerry figure out when to schedule. 
-# schedule meeting to decide on proxlogs 
-
-```
-
-### Reads transmitted from all meetings, by trial type
-```{r, echo = FALSE, fig.height = 8}
-
- Tag_Data %>%
- ggplot( aes(x= RX_Node)) +
-      geom_bar() + 
-      facet_wrap(~test_type, scales="free_x", ncol = 2) 
-
-for (var in unique(Tag_Data$test_type)) {
-    #dev.new()
-    print( ggplot(Tag_Data[Tag_Data$test_type==var,], aes(x= RX_Node)) +
-                        geom_bar()+
-                  ggtitle(var))
-}
-
-
-# make lines for how much there should be. 
-# make a % missing from each tag
-# do the same thing per dyad? 
-# any settings that make them less likely to miss data? 
-# seperate out y 5 minutes or 2 minutes? 
-# break down by 5 minute intervals
+  #trial ran for 81120 seconds. cut into bins of about 30 minutes: 
+81120/(30*60)
+#expected = 180
+#Dyad: 60*30/20 
+300
+Tag_Data %>%
+      filter(trial == "battery_life") %>%
+      arrange(Date_Time) %>% 
+      mutate( time_ints = cut(Date_Time, breaks = 36)) %>%
+       group_by(time_ints, Dyad) %>% 
+      summarise(n=n()) %>%
+      ggplot(aes(x=time_ints, y= n, color = Dyad)) +
+      geom_point() +
+      geom_hline(yintercept= 180, linetype="dashed", # expected
+                color = "red") +
+      theme(axis.text.x = element_text(angle = 45)) +
+      ylim(0, 200)
       
-```
+#ggsave("battery_life_proxlog.jpg")
+(60*30)/20*(5-1)     
 
-### Mean and variance in number of contacts per tag type
-```{r, echo = FALSE}
-# for each test/tag type, summarize the mean # of contacts/tagID and the variance. 
-Tag_read_variance <- 
-      Tag_Data %>%
-       group_by(test_type_tag, RX_Node) %>%
-       summarize(n=n())%>%
-       pivot_wider(names_from = RX_Node, values_from = n) %>%
-       rowwise() %>%
-        mutate(
-       mean = mean(c_across(2:9), na.rm = TRUE),
-      sd = sd(c_across(2:10), na.rm = TRUE)
-      ) %>%
-       ungroup() %>%
-       select(test_type_tag, mean, sd) %>%
-       separate_wider_delim(test_type_tag, delim = "_", names = c("test", "type", "tag")) %>%
-       mutate(test_type = paste(test, type,  sep = "_")) %>%
-       select(-c(test, type)) %>%
-       relocate(test_type)
-Tag_read_variance
+ # dskjdhfkseh
+ # would he pay for it himself. ##let him know let him know asap. 
+ # he could down 
+ # email sauer glue 
+ #  estimate Caleb arrival (3 weeks) 
+ # first impressions!
+# do his comparison with dulog, email simon, email Nikklas
 
- Tag_read_variance %>%
-       mutate(test_type = fct_relevel(test_type, c("ten_parallel", "ten_moved", "fifty_parallel", "fifty_moved", "hundred_parallel", "hundred_moved", "twohundred_parallal", "threehundred_parallel", "fourhundred_parallel"))) %>%
-       ggplot(aes(x= test_type, y= sd, fill=tag)) +
-       geom_bar(stat = "identity", position = "dodge") +
-       theme(axis.text.x = element_text(angle = 45)) +
-       ggtitle("standard deviation in # of reads between different tags in a trial")
+
 
 ```
+
+There are some steep dips over the day. One possible explanation is that some of the tags fell to the floor overnight, and I stuck them back on when I came to clean the next morning. This could be those tags. It would show that transmission goes down with proximity to the floor (a  known issue) 
+
+
+
+
+
+
+
 
 The two tags have similar ranges. But the dulogs detected tags up to at least 4m from center
 Dulog reads more evenly than proxlog
@@ -719,140 +851,46 @@ Dulog reads more evenly than proxlog
 Tag_Data$RSSI <- as.numeric(Tag_Data$RSSI)
 
 
-# by tag
-ggplot(data= Tag_Data, aes(y=as.numeric(RSSI), x= distance_cm, color= as.factor(tag))) +
-      geom_point(position = "jitter") 
-
-# by tag with trendline
-ggplot(data= Tag_Data, aes(y=RSSI, x= distance_cm, color= as.factor(tag))) +
-      #geom_point(position = "jitter") +
-      geom_jitter() +
-       geom_smooth( level = .99) +
-      geom_smooth(method = "glm", formula = y~log(x), family = gaussian(link = 'log'))
-
-
-#by RX ID
-ggplot(data= Tag_Data, aes(y=RSSI, x= distance_cm, color= RX_TX)) +
-      geom_jitter()
-
-
-# by tag orientation
+#signal strength by distance in flight cage
 Tag_Data %>%
-      group_by(distance_cm) %>%
-      ggplot( aes(y=RSSI, x= distance_cm, color= type_parallel)) +
-      geom_jitter() 
+      filter(trial != "battery_life" ) %>%
+      filter(!grepl("circle",test_type)) %>%
+ggplot(aes(y=RSSI, x= distance_cm, color = Dyad)) +
+      geom_point(position = "jitter", alpha =.5) +
+      facet_wrap(~test_type, drop = TRUE)
 
-#by test
-Tag_Data %>%
-      filter(test_type != "group_no") %>%
-      group_by(distance_cm) %>%
-      ggplot( aes(y=RSSI, x= distance_cm, color= as.factor(test_type))) +
-      geom_jitter()
+ggsave("RSSI_by_distance_proxlog_flightcage.jpg")
+## very much not reliable by distance in this context-- way too much interference? 
 
-# zooming in on close distances only 
-# by RX ID
-ggplot(data= Tag_Data, aes(y=RSSI, x= distance_cm, color= as.factor(tag))) +
-      geom_jitter() +
-      xlim(0, 100)
 
 
 # # trying to summarize distance
 Tag_Data %>%
       group_by(tag, distance_cm) %>%
+      filter(distance_cm != "NA") %>%
       mutate(dist_test = paste(distance_cm, test_type, sep = "_")) %>%
-ggplot(aes(y=RSSI, x= as.factor(distance_cm), color= tag)) +
+ggplot(aes(y=RSSI, x= as.factor(distance_cm))) +
       geom_violin()
-      
+ 
+#completely unreliable across these distances
 
 str(Tag_Data)
 ```
-Proxlog and Dulog use different signals, so they have different signal strengths at the same distances. 
-Proxlog declines logarithmically, is especially steep at low distances. Dulog initially declines very precipitously and later declines  linearly. 
-
-### Differences in signal strength variance by group
-```{r, echo = FALSE}
-sd_tags <- Tag_Data %>%
-      filter(distance_cm < 600 ) %>%
-  group_by( distance_cm, tag) %>%
-      summarize(RSSI_SD=sd(RSSI), RSSI_mean = mean(RSSI), N=n())
-sd_tags
-
-sd_tags %>%
-      ggplot(aes(x=distance_cm, y= RSSI_SD, color = tag )) +
-      geom_point() +
-      geom_smooth(level = .99) +
-      xlab("Distance (cm)") +
-      ylab("RSSI SD")
-
- 
-
- Tag_Data %>%
-       group_by(distance_cm) %>%
-       filter(any(tag=="dulog") & any(tag=="proxlog")) %>% #remove groups where there aren't observations for both prox and dulogs.
-       group_by(distance_cm) %>%
-       group_map(~ bartlett.test(x=.$RSSI, g=.$tag))
-       #bartlett.test(x=.$RSSI, g=.$tag)
- 
-  #bartlett.test(RSSI ~ tag)
-#find the mean difference in signal strength between each group
-#compare the variance between each group @ given signal strength  Bartlett test
-  
-  
-Tag_Data %>%
-      filter(distance_cm ==100.00) %>%
-      group_by(test_type, tag) %>%
-  filter(row_number()==1)
-```
-
-There is no obvious difference in the variation in signal strength between the two tags. 
-At small distances, both tags have about the same variance, and at larger distances, dulogs seem to have higher variances in signal strength 
 
 
-### Sensitivity to tag direction
-```{r, echo = FALSE}
-# by tag orientation
-Tag_Data %>%
-      group_by(distance_cm) %>%
-      filter(distance_cm <= 200) %>%
-      ggplot( aes(y=RSSI, x= distance_cm, color= type_parallel)) +
-      geom_jitter(alpha = .8) 
+#write combined dataset
+```{r}
 
-#dulog comparison
-Tag_orientation_p <- function(Tag) {
+Tag_Data <-Tag_Data %>%
+  distinct(.keep_all = TRUE)
+
+Tag_Data_Jan26 <-
       Tag_Data %>%
-       filter(distance_cm <= 200) %>%
-      filter(tag== Tag) %>%
-      group_by(distance_cm, type_parallel) %>%
-      mutate(dist_pos = paste(distance_cm, type_parallel, sep = "_")) %>%
-      mutate(dist_pos = fct_reorder(dist_pos, distance_cm)) %>%
-      ggplot( aes(y=RSSI, x= as.factor(distance_cm), fill= type_parallel)) +
-      geom_violin(alpha = .8) +
-      xlab("Tag Distance") +
-      ylab("Signal Strength (RSSI)") + 
-      scale_fill_discrete(name = "Tag Orientation") +
-      ggtitle(paste(Tag, "signal strength by tag orientation and distance", sep = " "))
-      
-}
-
-Tag_orientation_p(Tag = "dulog")
-Tag_orientation_p(Tag = "proxlog")
-
-
-
-Tag_Data %>%
-      filter(distance_cm <= 200) %>%
-      group_by(distance_cm, tag, type_parallel) %>%
-       filter(test_type == "ten_moved")
-#return here
-#summarize differences in orientation at each distance (not adjusted for multiple comparisons)
-Tag_Data %>%
-      filter(distance_cm <= 200) %>%
-      group_by(distance_cm, tag) %>%
-      summarize(T_test = t.test(RSSI[type_parallel=="parallel"], RSSI[type_parallel=="moved"])$p.value)
-
+      select(!Dyad_test_type) %>% #drop dyad dummy variable 
+      relocate(Dyad, RSSI, Date_Time, trial, test_type)
+#write.csv(Tag_Data, "Jan26_logger_testing.csv")
 
 ```
-The orientation of the tag does not seem to have a consistent effect for either tag, though the positions in this test were not highly standard. 
 
 
 ##############
